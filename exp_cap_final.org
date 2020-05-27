@@ -1,0 +1,2267 @@
+#+TITLE: Finalising Exploring Eurovision Data  v2.0
+#+AUTHOR: Antonio Mendes
+#+EMAIL: <antonio.mendes@mlprograms.com>
+#+DATE: 22 / 05 / 2020
+#+PROPERTY: header-args :exports both :session caps_exp :results value
+* Preparation
+** Imports
+*** standard
+#+BEGIN_SRC python 
+  import pandas as pd
+  import numpy as np
+#+END_SRC
+
+#+RESULTS:
+
+*** matplotlib
+#+BEGIN_SRC python
+  import matplotlib.pyplot as plt
+  plt.style.use("fivethirtyeight")
+  import matplotlib.ticker as ticker
+  plt.rcParams["font.family"] = "Times New Roman"
+#+END_SRC
+
+#+RESULTS:
+
+*** import os and getting current directory
+#+BEGIN_SRC python
+import os
+from pathlib import Path
+cwd = os.path.abspath(os.getcwd())
+fig_dir = Path("/".join(cwd.split("/")[:-1])) / "capstone"
+fig_dir
+#+END_SRC
+
+#+RESULTS:
+: /Users/antoniomendes/AUC_code/capstone
+
+*** sklearn
+#+BEGIN_SRC python
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+
+from sklearn.preprocessing import LabelEncoder
+from sklearn.neighbors import KNeighborsClassifier
+#+END_SRC
+
+#+RESULTS:
+
+*** tools
+#+BEGIN_SRC python
+from itertools import combinations
+from math import sqrt
+from scipy.spatial.distance import cdist
+from kneed import KneeLocator 
+#+END_SRC
+
+#+RESULTS:
+
+*** pca
+#+BEGIN_SRC python
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+#+END_SRC
+
+#+RESULTS:
+
+** Getting the Data
+*** UvA Data
+***** Loading the DataFrames
+#+BEGIN_SRC python 
+contestants_df = pd.read_csv("data/contestants.csv")
+features_df = pd.read_csv("data/features.csv")
+votes_df = pd.read_csv("data/votes.csv")
+#+END_SRC
+
+#+RESULTS:
+***** Merging the DataFrames
+#+BEGIN_SRC python
+features_df["year_country"] = features_df["year"].astype(str) + "-" + features_df["country"]
+contestants_df["year_country"] = contestants_df["year"].astype(str) + "-" + contestants_df["from_country"]
+
+features_contestants_df = pd.merge(features_df, contestants_df, on=["year", "year_country"])
+#+END_SRC
+
+#+RESULTS:
+
+*** Spotify data 
+***** Loading Spotify Data
+#+BEGIN_SRC python
+spotify_df = pd.read_csv("data/spotify_data.csv")
+#+END_SRC
+
+#+RESULTS:
+
+***** Getting List of All Unique Genres
+#+BEGIN_SRC python
+unique_genres = list()
+for i in range(len(spotify_df)):
+  genre_string = spotify_df.iloc[i]["genres"]
+  if type(genre_string) == str:
+    if "$$$" in genre_string and type(genre_string) == str:
+      for genre in genre_string.split("$$$"):
+        if genre not in unique_genres:
+          unique_genres.append(genre)
+    elif len(genre_string) > 0:
+      if genre_string not in unique_genres:
+        unique_genres.append(genre_string)
+#+END_SRC
+
+#+RESULTS:
+
+***** Label Encoding Genres
+#+BEGIN_SRC python
+le = LabelEncoder()
+genre_dummy_labels = le.fit_transform(unique_genres)
+
+genre_to_label_dict = dict()
+
+for i,genre in enumerate(unique_genres):
+  genre_to_label_dict[genre] = genre_dummy_labels[i]
+#+END_SRC
+
+#+RESULTS:
+
+***** Creating Columns for Genre Encodings
+#+BEGIN_SRC python
+genre_label_column_dict = dict()
+genre_name_column_dict = dict()
+
+for j in range(7):
+  genre_label_column_dict[j] = list()
+
+for j in range(7):
+  genre_name_column_dict[j] = list()
+
+for i in range(len(spotify_df)):
+  genre_string = spotify_df.iloc[i]["genres"]
+  track_genre_labels = list()
+  track_genre_names = list()
+  if type(genre_string) == str:
+    if "$$$" in genre_string:
+      for genre in genre_string.split("$$$"):
+        track_genre_labels.append(genre_to_label_dict[genre])
+        track_genre_names.append(genre)
+    elif len(genre_string) > 0:
+      track_genre_labels.append(genre_to_label_dict[genre_string])
+      track_genre_names.append(genre_string)
+  for j in range(7 - len(track_genre_labels)):
+    track_genre_labels.append('')
+    track_genre_names.append('')
+  for j,genre_label in enumerate(track_genre_labels):
+    genre_label_column_dict[j].append(genre_label)
+  for j,genre_name in enumerate(track_genre_names):
+    genre_name_column_dict[j].append(genre_name)
+  
+
+for j in range(7):
+  column_name = str(
+    "genre_label_"
+    + str(j)
+  )
+  spotify_df[column_name] = genre_label_column_dict[j]
+
+for j in range(7):
+  column_name = str(
+    "genre_name_"
+    + str(j)
+  )
+  spotify_df[column_name] = genre_name_column_dict[j]
+#+END_SRC
+
+#+RESULTS:
+
+***** Filtering Spotify Data for Songs without Genres
+#+BEGIN_SRC python
+filtered_spotify_df = spotify_df[spotify_df.genre_count != 0]
+filtered_spotify_df.genre_label_0 = filtered_spotify_df.genre_label_0.astype(np.int16)
+#+END_SRC
+
+#+RESULTS:
+
+*** Feature Information
+***** column_num_dict
+#+BEGIN_SRC python
+column_num_dict = {
+  "lowlevel.mfcc.mean."                       : 13,
+  "lowlevel.melbands.mean."                   : 40,
+  "lowlevel.melbands.dmean."                  : 40,
+  "lowlevel.spectral_contrast_coeffs.dmean."  : 6,
+  "lowlevel.spectral_contrast_coeffs.dmean2." : 6,
+  "lowlevel.spectral_contrast_coeffs.mean."   : 6
+}
+#+END_SRC
+
+#+RESULTS:
+
+***** feature_attachments
+#+BEGIN_SRC python
+feature_attachments = [
+  #"dmean",
+  #"dmean2",
+  #"dvar",
+  #"dvar2",
+  #"max",
+  "mean",
+  #"median",
+  #"min",
+  #"stdev",
+  #"var",
+]
+#+END_SRC
+
+#+RESULTS:
+
+***** feature_to_shorthand
+#+BEGIN_SRC python
+feature_to_shorthand = {
+  "lowlevel.mfcc.mean."                       : "mfcc_mean",
+  "lowlevel.melbands.mean."                   : "melb_mean",
+  "lowlevel.melbands.dmean."                  : "melb_dmean", 
+  "lowlevel.spectral_contrast_coeffs.dmean."  : "spec_cc_dmean",
+  "lowlevel.spectral_contrast_coeffs.dmean2." : "spec_cc_dmean2",
+  "lowlevel.spectral_contrast_coeffs.mean."   : "spec_cc_mean",  
+  "lowlevel.barkbands_flatness_db"            : "bark_flat_", 
+  "lowlevel.barkbands_spread"                 : "bark_sprd_",
+  "lowlevel.dissonance"                       : "diss_",
+  "lowlevel.erbbands_flatness_db"             : "erb_flat_",
+  "lowlevel.erbbands_spread"                  : "erb_sprd_",
+  "lowlevel.hfc"                              : "hfc_",
+  "lowlevel.silence_rate_30dB"                : "sil_",
+  "lowlevel.spectral_energy"                  : "spec_nrg_",
+  "lowlevel.spectral_energyband_low"          : "spec_nrg_low_",
+  "lowlevel.spectral_entropy"                 : "spec_ntrp_",
+  "lowlevel.spectral_flux"                    : "spec_flux_",
+  "lowlevel.spectral_kurtosis"                : "spec_kurt_",
+  "lowlevel.spectral_rms"                     : "spec_rms_",
+  "rhythm.beats_loudness"                     : "beat_loud_",
+  "tonal.tuning_equal_tempered_deviation"     : "tetd_",
+  "tonal.tuning_nontempered_energy_ratio"     : "tner_",
+}
+#+END_SRC
+
+#+RESULTS:
+***** shorthand_to_feature
+#+BEGIN_SRC python
+shorthand_to_feature = {
+  "mfcc_mean"      : "lowlevel.mfcc.mean.",
+  "melb_mean"      : "lowlevel.melbands.mean.",
+  "melb_dmean"     : "lowlevel.melbands.dmean.", 
+  "spec_cc_dmean"  : "lowlevel.spectral_contrast_coeffs.dmean.",
+  "spec_cc_dmean2" : "lowlevel.spectral_contrast_coeffs.dmean2.",
+  "spec_cc_mean"   : "lowlevel.spectral_contrast_coeffs.mean.",  
+  "bark_flat_"     : "lowlevel.barkbands_flatness_db", 
+  "bark_sprd_"     : "lowlevel.barkbands_spread",
+  "diss_"          : "lowlevel.dissonance",
+  "erb_flat_"      : "lowlevel.erbbands_flatness_db",
+  "erb_sprd_"      : "lowlevel.erbbands_spread",
+  "hfc_"           : "lowlevel.hfc",
+  "sil_"           : "lowlevel.silence_rate_30dB",
+  "spec_nrg_"      : "lowlevel.spectral_energy",
+  "spec_nrg_low_"  : "lowlevel.spectral_energyband_low",
+  "spec_ntrp_"     : "lowlevel.spectral_entropy",
+  "spec_flux_"     : "lowlevel.spectral_flux",
+  "spec_kurt_"     : "lowlevel.spectral_kurtosis",
+  "spec_rms_"      : "lowlevel.spectral_rms",
+  "beat_loud_"     : "rhythm.beats_loudness",
+  "tetd_"          : "tonal.tuning_equal_tempered_deviation",
+  "tner_"          : "tonal.tuning_nontempered_energy_ratio",
+}
+#+END_SRC
+
+#+RESULTS:
+***** features_list
+#+BEGIN_SRC python
+features_list = [
+  "lowlevel.mfcc.mean.",
+  "lowlevel.melbands.mean.",
+  "lowlevel.melbands.dmean.",
+  "lowlevel.spectral_contrast_coeffs.dmean.",
+  "lowlevel.spectral_contrast_coeffs.dmean2.",
+  "lowlevel.spectral_contrast_coeffs.mean.",  
+  "lowlevel.barkbands_flatness_db",             # [200:300]
+  "lowlevel.barkbands_spread",                  # [300:400]
+  "lowlevel.dissonance",                       # [300:400]
+  "lowlevel.erbbands_flatness_db",             # [700:800]
+  "lowlevel.erbbands_spread",                  # [700:800]
+  "lowlevel.hfc",                              # [1100:1200]
+  "lowlevel.silence_rate_30dB",                # [3200:3300]
+  "lowlevel.spectral_energy",                  # [3400:3500]
+  "lowlevel.spectral_energyband_low",          # [3400:3500]
+  "lowlevel.spectral_entropy",                 # [3450:3550]
+  "lowlevel.spectral_flux",                    # [3450:3550]
+  "lowlevel.spectral_kurtosis",                # [3450:3550]
+  "lowlevel.spectral_rms",                     # [3450:3550]
+  "rhythm.beats_loudness",                     # [3550;3700]
+  "tonal.tuning_equal_tempered_deviation",     # [4300:4400]
+  "tonal.tuning_nontempered_energy_ratio",     # [4300:4400]
+]
+#+END_SRC
+
+#+RESULTS:
+
+*** get_feature_df()
+#+BEGIN_SRC python
+def get_feature_df(features):
+  all_columns = list()
+  all_columns.append("year_country")
+  all_columns.append("year")
+  all_columns.append("country")
+  all_columns.append("place_final")
+  all_columns.append("points_final")
+  feature_columns = list()
+  feature_columns_dict = dict()
+  for feat in features:
+    feature_columns_dict[feat] = list()
+    start_string = feat
+    if start_string[-1] == ".":
+      for j in range(column_num_dict[feat]):
+        full_string = str(
+          start_string
+          + str(j)
+        )
+        all_columns.append(full_string)
+        feature_columns.append(full_string)
+        feature_columns_dict[feat].append(full_string)
+    else:
+      full_string = start_string
+      all_columns.append(full_string)
+      feature_columns.append(full_string)
+      feature_columns_dict[feat].append(full_string)
+  return feature_columns, feature_columns_dict, features_contestants_df[all_columns], features_contestants_df[feature_columns]  
+#+END_SRC
+
+#+RESULTS:
+
+*** For comparing labels to song performance 
+***** Comparing Spotify Genres to Final Place
+****** Plot
+#+BEGIN_SRC python :results file
+entire_df = pd.merge(features_contestants_df, filtered_spotify_df, on=["year","year_country"])
+
+genres = list()
+place_finals = list()
+for i in range(len(entire_df)):
+  current_genres = entire_df.iloc[i].genres.split("$$$")
+  current_place  = entire_df.iloc[i].place_final
+  #print("current_place:",current_place)
+  for curr_genre in current_genres:
+    genres.append(curr_genre)
+    place_finals.append(current_place)
+
+genre_df = pd.DataFrame({
+  "genre" : genres,
+  "place_final" : place_finals
+})
+
+genre_df = genre_df.dropna(subset=["place_final"])
+genre_df.place_final = genre_df.place_final.astype(np.int8)
+
+grouped_df = genre_df.groupby(["genre"], sort=True).mean()
+
+aggregate_df = pd.DataFrame({
+  "genre" : grouped_df.index.to_numpy(),
+  "place_final" : grouped_df["place_final"]
+})
+
+aggregate_df = aggregate_df.sort_values(by=["place_final"], ascending = False)
+aggregate_spotify_df = aggregate_df
+fig = plt.figure(figsize=(70,30))
+ax = fig.add_subplot(111)
+
+x = np.arange(len(aggregate_df))
+y = np.array(aggregate_df.place_final)
+
+ax.scatter(
+  x,
+  y,
+  s=700,
+  linewidths=1,
+  alpha=0.7,
+  edgecolor="k",
+  zorder=1,
+)
+
+ax.plot(
+  x,y, 
+  color="orange", 
+  linewidth=10,
+  zorder=0
+)
+
+ax.set_title("Spotify Genre Label vs. Place at Finals", pad=60, fontsize=70)
+ax.set_xlabel("Genre Label", labelpad=40, fontsize=60)
+ax.set_xticks(x)
+ax.set_xticklabels(aggregate_df.genre)
+
+
+ax.set_ylabel("Place at Finals", labelpad=40, fontsize=60)
+ax.tick_params(axis='x', labelsize=20)
+plt.setp( ax.xaxis.get_majorticklabels(), rotation=90)
+ax.tick_params(axis='y', labelsize=48)
+ax.tick_params(axis='x', labelsize=40)
+
+ax.set_xlim(-1,np.max(x) + 1)
+ax.set_ylim(-1,np.max(y) + 1)
+ax.yaxis.set_major_locator(ticker.MultipleLocator(5))
+plt.gcf().subplots_adjust(
+  left = 0.1,
+  bottom=0.25
+)
+plt.savefig(
+  fig_dir / "plots" / "spotify_genre_place_final_sorted.pdf",
+  bbox_inches="tight", 
+  dpi = fig.dpi,
+)
+plt.close("all")
+fig_dir / "plots" / "spotify_genre_place_final_sorted.pdf"
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/plots/spotify_genre_place_final_sorted.pdf]]
+
+****** Top 10 Genres
+#+BEGIN_SRC python
+top_df = filtered_spotify_df[
+  filtered_spotify_df.genre_name_0.isin(aggregate_spotify_df.iloc[-10:].genre)
+  | filtered_spotify_df.genre_name_1.isin(aggregate_spotify_df.iloc[-10:].genre)
+  | filtered_spotify_df.genre_name_2.isin(aggregate_spotify_df.iloc[-10:].genre)
+  | filtered_spotify_df.genre_name_3.isin(aggregate_spotify_df.iloc[-10:].genre)
+  | filtered_spotify_df.genre_name_4.isin(aggregate_spotify_df.iloc[-10:].genre)
+  | filtered_spotify_df.genre_name_5.isin(aggregate_spotify_df.iloc[-10:].genre)
+  | filtered_spotify_df.genre_name_6.isin(aggregate_spotify_df.iloc[-10:].genre)
+]
+
+max_genres = 0
+for i in range(len(top_df)):
+  if len(top_df["genres"].iloc[i].split("$$$")) > max_genres:
+    max_genres = len(top_df["genres"].iloc[i].split("$$$"))
+
+top_df[[
+  "year",
+  "country",
+  "genre_name_0",
+  "genre_name_1",
+  "genre_name_2",
+  "genre_name_3",
+  "genre_name_4",
+]]
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+     year    country              genre_name_0            genre_name_1      genre_name_2   genre_name_3    genre_name_4
+42   2011      Angel               russian pop                                                                         
+73   2012     Sweden                electropop                 europop        eurovision    swedish pop                
+110  2013     Norway                electropop           norwegian pop                                                 
+148  2014    Austria                eurovision                   strut                                                 
+151  2014     Sweden       classic swedish pop                 europop  swedish idol pop    swedish pop                
+185  2015     Sweden                   europop              eurovision  swedish idol pop    swedish pop                
+186  2015     Russia                eurovision       russian dance pop       russian pop                               
+187  2015      Italy  italian progressive rock            operatic pop                                                 
+225  2016    Ukraine                eurovision               tatar pop   ukrainian indie  ukrainian pop  ukrainian rock
+226  2016  Australia            australian pop  australian talent show        eurovision    talent show                
+227  2016     Russia                eurovision       russian dance pop       russian pop                               
+229  2016     Sweden          swedish idol pop                                                                         
+263  2016   Interval                   europop              eurovision  swedish idol pop    swedish pop                
+272  2017     Sweden                   europop        swedish idol pop       swedish pop                               
+313  2018    Germany                german pop               viral pop                                                 
+341  2018    Belarus         russian dance pop             russian pop     ukrainian pop                               
+363  2019     Russia                eurovision       russian dance pop       russian pop                               
+394  2019    Ukraine                eurovision             russian pop     ukrainian pop                               
+#+end_example
+
+****** Bottom 10 Genres
+#+BEGIN_SRC python
+bot_df = filtered_spotify_df[
+  filtered_spotify_df.genre_name_0.isin(  aggregate_spotify_df.iloc[:10].genre)
+  | filtered_spotify_df.genre_name_1.isin(aggregate_spotify_df.iloc[:10].genre)
+  | filtered_spotify_df.genre_name_2.isin(aggregate_spotify_df.iloc[:10].genre)
+  | filtered_spotify_df.genre_name_3.isin(aggregate_spotify_df.iloc[:10].genre)
+  | filtered_spotify_df.genre_name_4.isin(aggregate_spotify_df.iloc[:10].genre)
+  | filtered_spotify_df.genre_name_5.isin(aggregate_spotify_df.iloc[:10].genre)
+  | filtered_spotify_df.genre_name_6.isin(aggregate_spotify_df.iloc[:10].genre)
+]
+
+max_genres = 0
+for i in range(len(bot_df)):
+  if len(bot_df["genres"].iloc[i].split("$$$")) > max_genres:
+    max_genres = len(bot_df["genres"].iloc[i].split("$$$"))
+
+bot_df[[
+  "year",
+  "country",
+  "genre_name_0",
+  "genre_name_1",
+  "genre_name_2",
+  "genre_name_3",
+]]
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+     year         country     genre_name_0        genre_name_1    genre_name_2 genre_name_3
+38   2010     Switzerland        swiss pop                                                 
+55   2011     Switzerland       eurovision         swiss indie       swiss pop             
+59   2011           Spain   galician indie                                                 
+89   2012  United Kingdom  adult standards  brill building pop  easy listening       lounge
+127  2013         Finland       eurovision         finnish pop                             
+166  2014        Slovenia    slovenian pop      slovenian rock                             
+206  2015         Austria     austrian pop          eurovision                             
+334  2018         Finland       eurovision    finnish idol pop     finnish pop             
+338  2018     Switzerland       eurovision           swiss pop                             
+378  2019         Austria     austrian pop                                                 
+#+end_example
+
+* Clustering
+** KMeans
+*** Silhouette Scores
+***** Getting Silhouette Scores
+****** get_feature_keys()
+#+BEGIN_SRC python
+def get_feature_keys(features):
+  feature_keys = list()
+  for feat in features:
+    if feat[-1] == ".":
+      feature_keys.append(feature_to_shorthand[feat])
+    elif feat not in ["tonal.tuning_equal_tempered_deviation", "tonal.tuning_nontempered_energy_ratio"]:
+      for attachment in feature_attachments:
+        feature_keys.append(
+          str(
+            feature_to_shorthand[feat]
+            + attachment
+          )
+        )
+    else:
+      feature_keys.append(feature_to_shorthand[feat])
+  return feature_keys
+#+END_SRC
+
+#+RESULTS:
+
+****** get_feature_from_key()
+#+BEGIN_SRC python
+def get_feature_from_key(feature_key):
+  if feature_key in ["mfcc_mean", "melb_dmean", "melb_dmean", "spec_cc_deman", "spec_cc_dmean2", "spec_cc_mean"] :
+    return get_feature_df([shorthand_to_feature[feature_key]])[3]
+  else:
+    key_parts = feature_key.split("_")
+    attachment = key_parts[-1]
+    shorthand_length = len(feature_key) - len(attachment)
+    shorthand = feature_key[:shorthand_length]
+    feature_column = str(
+      shorthand_to_feature[shorthand]
+      + "."
+      + attachment
+    )
+    return features_contestants_df[feature_column]
+#+END_SRC
+
+#+RESULTS:
+
+****** get_columns_from_keys()
+#+BEGIN_SRC python
+def get_columns_from_keys(feature_keys):
+  #print("GETTING COLUMNS...")
+  feature_columns = list()
+  for feature_key in feature_keys:
+    if feature_key in ["mfcc_mean", "melb_dmean", "melb_dmean", "spec_cc_dmean", "spec_cc_dmean2", "spec_cc_mean"]:
+      feat = shorthand_to_feature[feature_key]
+      for j in range(column_num_dict[feat]):
+        full_string = str(
+          feat
+          + str(j)
+        )
+        feature_columns.append(full_string)
+    elif feature_key not in ["tetd_", "tner_"]:
+      key_parts = feature_key.split("_")
+      attachment = key_parts[-1]
+      shorthand_length = len(feature_key) - len(attachment)
+      shorthand = feature_key[:shorthand_length]
+      feature_column = str(
+        shorthand_to_feature[shorthand]
+        + "."
+        + attachment
+      )
+      feature_columns.append(feature_column)
+    else:
+      feature_column = shorthand_to_feature[feature_key]
+      feature_columns.append(feature_column)
+  return feature_columns
+#+END_SRC
+
+#+RESULTS:
+
+****** get_silhouette_scores()
+#+BEGIN_SRC python
+def get_silhouette_scores(features):
+  sil_score_dict          = dict()
+  total_combinations      = list()
+  positive_sil_score_dict = dict()
+  best_sil_score_dict     = dict()
+  feature_keys = get_feature_keys(features)
+  for i in range(2, len(feature_keys) + 1):
+    print(i," / ",len(feature_keys))
+    curr_combinations = list(combinations(
+      feature_keys,
+      i
+    ))
+    for comb in curr_combinations:
+      comb = list(comb)
+      comb_key = " + ".join(comb)
+      total_combinations.append(comb_key)
+      sil_score_dict[comb_key] = list()
+      X = get_feature_df(get_columns_from_keys(comb))[3]
+      for n in range(2,41):
+        kmeans = KMeans(n_clusters=n, random_state=0)
+        clusters = kmeans.fit(X)
+        labels = kmeans.labels_
+        sil_score_dict[comb_key].append(silhouette_score(X, labels))
+  slopes = list()
+  for combination in list(sil_score_dict.keys()):
+    average_slope = np.mean(np.gradient(sil_score_dict[combination]))
+    if average_slope >= -0.001:
+      positive_sil_score_dict[combination] = sil_score_dict[combination]
+      slopes.append(np.mean(np.gradient(positive_sil_score_dict[combination])))
+  slope_df = pd.DataFrame({
+    "key"           : list(positive_sil_score_dict.keys()),
+    "average_slope" : slopes
+  }).sort_values(by=["average_slope"], ascending=False)
+  if len(positive_sil_score_dict) > 10:
+    slope_df = slope_df.iloc[:11]
+    for key in slope_df["key"]:
+      best_sil_score_dict[key] = positive_sil_score_dict[key]
+  else:
+    for key in slope_df["key"]:
+      best_sil_score_dict[key] = positive_sil_score_dict[key]
+  return sil_score_dict, positive_sil_score_dict, best_sil_score_dict
+#+END_SRC
+
+#+RESULTS:
+
+***** Plotting Silhouette Scores
+****** get curr_features_list
+#+BEGIN_SRC python
+curr_features_list = [
+  "lowlevel.barkbands_flatness_db",             # [200:300]
+  "lowlevel.barkbands_spread",                  # [300:400]
+  "lowlevel.dissonance",                       # [300:400]
+  "lowlevel.erbbands_flatness_db",             # [700:800]
+  "lowlevel.erbbands_spread",                  # [700:800]
+  "lowlevel.hfc",                              # [1100:1200]
+  "lowlevel.silence_rate_30dB",                # [3200:3300]
+  "lowlevel.spectral_energy",                  # [3400:3500]
+  "lowlevel.spectral_energyband_low",          # [3400:3500]
+  "lowlevel.spectral_entropy",                 # [3450:3550]
+  "lowlevel.spectral_flux",                    # [3450:3550]
+  "lowlevel.spectral_kurtosis",                # [3450:3550]
+  "lowlevel.spectral_rms",                     # [3450:3550]
+  "rhythm.beats_loudness",                     # [3550;3700]
+  "tonal.tuning_equal_tempered_deviation",     # [4300:4400]
+  "tonal.tuning_nontempered_energy_ratio",     # [4300:4400]
+]
+#+END_SRC
+
+#+RESULTS:
+
+****** get best_sil_score_dict
+#+BEGIN_SRC python
+sil_score_dict, positive_sil_score_dict, best_sil_score_dict = get_silhouette_scores(curr_features_list)
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python
+best_permutations = list(best_sil_score_dict.keys())
+#+END_SRC
+
+#+RESULTS:
+
+****** plot_silhouette()
+#+BEGIN_SRC python
+def plot_silhouette(permutations, sil_score_dict, clustering_method="kmeans"):
+  fig = plt.figure(figsize=(40,32))
+  ax = fig.add_subplot(111)
+  for i, perm in enumerate(permutations):
+    x = np.arange(len(sil_score_dict[perm])) + 2
+    y = sil_score_dict[perm]
+    if i > 11:
+      ax.plot(x, y, label=perm, linewidth=10, linestyle="dashdot", alpha=0.75)
+    elif i > 5:
+      ax.plot(x, y, label=perm, linewidth=10, linestyle="dashed", alpha=0.75)
+    else:
+      ax.plot(x, y, label=perm, linewidth=10, alpha=0.75)
+  ax.legend(prop={"size" : 40})
+  title = str(
+    "Relationship between Silhouette Score and Number of Clusters"
+    + "\n"
+    + "For "
+    + clustering_method.title()
+  )
+  ax.set_title(title, pad=80, fontsize=72)
+  ax.set_xlabel("Number of Clusters", labelpad=40, fontsize=60)
+  ax.set_ylabel("Silhouette Score", labelpad=40, fontsize=60)
+  ax.set_ylim(0,1)
+  ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
+  ax.tick_params(axis='y', labelsize=48)
+  ax.tick_params(axis='x', labelsize=48)
+  list_of_key_lists = [key.split(" + ") for key in list(sil_score_dict.keys())]
+  list_of_keys = list()
+  for key in list(sil_score_dict.keys()):
+    list_of_keys.append(key.split(" + "))
+  #list_of_keys = list(set(["".join(y.split("_")) for x in list_of_keys for y in x]))
+  list_of_keys = list(set([y for x in list_of_keys for y in x]))
+  filename = str(
+    "sil_scores_"
+    + clustering_method
+    #+ "_"
+    #+ "_".join(list_of_keys)
+    + ".png"
+  )
+  plt.savefig(fig_dir / "plots" / filename, bbox_inches="tight")
+  return fig_dir / "plots" / filename
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :results file
+plot_silhouette(best_permutations, best_sil_score_dict)
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/plots/sil_scores_kmeans.png]]
+
+*** Determining Best Cluster Amount
+***** Determining the best number of clusters (Elbow Method)
+****** get_distortions_inertias():
+#+BEGIN_SRC python
+def get_distortions_inertias(feature_keys):
+  print("feature_keys:",feature_keys)
+  distortions_dict = dict()
+  inertias_dict = dict()
+  for fks in feature_keys:
+    print("fks:",fks)
+    distortions_dict[fks] = list()
+    inertias_dict[fks]    = list()
+    X = get_feature_df(get_columns_from_keys(feature_keys))[3]
+    for n in range(2,41):
+      kmeans = KMeans(n_clusters=n, random_state=0)
+      clusters = kmeans.fit(X)
+      distortion = np.sum(np.min(cdist(X, clusters.cluster_centers_,
+        "euclidean"),
+        axis =1
+      ))
+      distortions_dict[fks].append(distortion)
+      inertias_dict[fks].append(clusters.inertia_)
+  return distortions_dict, inertias_dict
+#+END_SRC
+
+#+RESULTS:
+
+****** plot_elbow_method()
+#+BEGIN_SRC python
+def plot_elbow_method(feature_key, method="kmeans"):
+  distortions = list()
+  inertias = list()
+  X = get_feature_df(get_columns_from_keys(feature_key.split(" + ")))[3]
+  for n in range(2,41):
+    kmeans = KMeans(n_clusters=n, random_state=0)
+    clusters = kmeans.fit(X)
+    distortion = np.sum(np.min(cdist(X, clusters.cluster_centers_,
+      "euclidean"),
+      axis =1
+    ))
+    distortions.append(distortion)
+    inertias.append(clusters.inertia_)
+  title = str(
+    "Elbow Method for"
+    + "\n"
+    + ", ".join(get_columns_from_keys(feature_key.split(" + ")))
+  )
+  if method == "pca_kmeans" or method == "pca_hierarchical":
+    title = str("Elbow Method for KMeans with PCA clustering")
+  fig, ax = plt.subplots(2, 1, sharex=True, sharey=False, figsize=(40,32))
+  elbow_types    = ["inertia", "distortion"]
+  elbow_features = [inertias, distortions]
+  elbow_colors = [
+    '008fd5', 
+    'fc4f30', 
+    'e5ae38', 
+    '6d904f', 
+    '8b8b8b', 
+    '810f7c'
+  ]
+  knees = list()
+  for i,eb in enumerate(elbow_types):
+    x = np.arange(len(elbow_features[i])) + 2
+    y = elbow_features[i]
+    ax[i].plot(
+      x, y,
+      label = elbow_types[i],
+      linewidth = 10,
+      color = tuple(int(elbow_colors[i][j:j+2], 16)/256 for j in (0, 2, 4))
+    )
+    kn = KneeLocator(x,y, curve="convex", direction="decreasing")
+    ax[i].vlines(
+      kn.knee,
+      0,
+      max(y),
+      linewidth  = 12,
+      linestyles = "dashed"
+    )
+    knees.append(kn.knee)
+    fig.text(0.5, 0.02, 'Number of Clusters', ha='center', fontsize =60)
+    ax[i].set_ylabel(
+      elbow_types[i].title(),
+      labelpad = 40,
+      fontsize = 60,
+    )
+    ax[i].xaxis.set_major_locator(ticker.MultipleLocator(2))
+    ax[i].tick_params(axis='x', labelsize=32)
+    ax[i].set_xticks(x)
+    string_labels = list()
+    for tick in x:
+      if len(str(tick)) == 1:
+        string_labels.append(str(tick).zfill(2))
+      else:
+        string_labels.append(str(tick))
+    ax[i].set_xticklabels(string_labels)
+    ax[i].tick_params(axis='y', labelsize=48)
+  fig.suptitle(
+    title, 
+    fontsize=72
+  )
+  filename = str(
+    "elbow_"
+    + "_".join([key.lower() for key in feature_key.split(" + ")])
+    + ".png"
+  )
+  if method == "pca_kmeans" or method == "pca_hierarchical":
+    filename = str(
+      "elbow_"
+      + "pca_"
+      + method.split("_")[1]
+      + ".png"
+    )
+  plt.savefig(fig_dir / "plots" / "elbow" / filename, bbox_inches="tight")
+  plt.close("all")
+  return knees[0], knees[1], fig_dir / "plots" / "elbow" / filename
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :results file
+for feature_key in list(best_sil_score_dict.keys()):
+  plot_elbow_method(feature_key)
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/plots/elbow_hfc_mean_spec_rms_mean.png]]
+
+
+#+BEGIN_SRC python :results file
+path = ''
+
+inertia_dict = dict()
+distortion_dict = dict()
+
+for feature_key in list(best_sil_score_dict.keys()):
+  inertia_dict[feature_key], distortion_dict[feature_key], path = plot_elbow_method(feature_key)
+
+path
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/plots/elbow/elbow_hfc_mean_spec_rms_mean.png]]
+
+*** Comparing Labels to Finals Place
+***** Getting and Plotting Labels against =place_final=
+****** plot_cluster_performance()
+#+BEGIN_SRC python
+def plot_cluster_performance(
+  merged_df_dict,
+  feature_x,
+  feature_y,
+  feature_z=None,
+  feature_v=None,
+  clusters=4,
+  include_min_max = False,
+):
+  x = get_feature_from_key(feature_x)
+  y = get_feature_from_key(feature_y)
+  data = np.array([x,y]).transpose()
+  feature_columns = get_columns_from_keys([feature_x, feature_y])
+  if feature_z is not None and feature_v is None:
+    z = get_feature_from_key(feature_z)
+    data = np.array([x,y,z]).transpose()
+    feature_columns = get_columns_from_keys([feature_x, feature_y, feature_z]) 
+  elif feature_z is not None and feature_v is not None:
+    z = get_feature_from_key(feature_z)
+    v = get_feature_from_key(feature_v)
+    data = np.array([x,y,z,v]).transpose()
+    feature_columns = get_columns_from_keys([
+      feature_x, 
+      feature_y, 
+      feature_z,
+      feature_v
+    ]) 
+  feature_df, X = get_feature_df(feature_columns)[2:]
+  kmeans   = KMeans(n_clusters=clusters, random_state=0).fit(data)
+  labels   = kmeans.labels_
+  feature_df["label"] = labels
+  merged_feature_df = pd.merge(feature_df, filtered_spotify_df, on=["year","year_country"])
+  merged_df_dict[" + ".join(feature_columns)] = merged_feature_df
+  merged_feature_df = merged_feature_df.dropna(subset=["place_final"])
+  df = pd.DataFrame({
+    "label" : merged_feature_df.label,
+    "place_final" : merged_feature_df.place_final
+  })
+  grouped_df = df.groupby(["label"], sort=True).mean()
+  average_df = pd.DataFrame({
+    "label" : grouped_df.index.to_numpy(),
+    "place_final" : grouped_df["place_final"]
+  })
+  average_df = average_df.sort_values(by=["place_final"], ascending=False)
+  fig = plt.figure(figsize=(38,34))
+  ax = fig.add_subplot(111)
+  x = np.arange(len(average_df))
+  y = np.array(average_df["place_final"])
+  ax.scatter(
+    x,
+    y,
+    s=2000,
+    linewidth=4,
+    #alpha=0.6,
+    edgecolor="k",
+    zorder=1,
+    label = "average"
+  )
+  ax.plot(
+    x, y,
+    linewidth=10,
+    color="orange",
+    zorder=0
+  )
+  if(include_min_max == True):
+    grouped_df = df.groupby(["label"], sort=True).max()
+    max_df = pd.DataFrame({
+      "label" : grouped_df.index.to_numpy(),
+      "policy_amnt" : grouped_df["place_final"]
+    })
+    x = np.arange(len(max_df))
+    y = np.array(max_df["place_final"])
+    ax.scatter(
+      x,
+      y,
+      s=2000,
+      linewidth=4,
+      marker="^",
+      edgecolor="k",
+      zorder=1,
+      label="max",
+    )
+    grouped_df = df.groupby(["label"], sort=True).min()
+    min_df = pd.DataFrame({
+      "label" : grouped_df.index.to_numpy(),
+      "place_final" : grouped_df["place_final"]
+    })
+    x = np.arange(len(min_df))
+    y = np.array(min_df["place_final"])
+    ax.scatter(
+      x,
+      y,
+      s=2000,
+      linewidth=4,
+      marker="v",
+      edgecolor="k",
+      zorder=1,
+      label="min"
+    )
+    ax.legend(prop={"size" : 40})
+  title = str(
+    "Relationship between KMeans Labels, from "
+    + str(feature_x)
+    + "\n"
+    + "and "
+    + str(feature_y)
+    + ", and =place_final"
+  )
+  if feature_z is not None and feature_v is None:
+    title = str(
+      "Relationship between KMeans Labels, from "
+      + str(feature_x)
+      + ",\n"
+      + str(feature_y)
+      + ", and"
+      + str(feature_z)
+      + ", and =place_final="
+    )
+  ax.set_title(title, pad=60, fontsize=70)
+  ax.set_xlabel("Label", labelpad=40, fontsize=60)
+  ax.set_ylabel("average =place_final=", labelpad=40, fontsize=60)
+  if(include_min_max == True):
+    ax.set_ylabel("average =place_final=", labelpad=40, fontsize=60)
+  ax.set_xlim(
+    np.min(x) -0.5,
+    np.max(x) + 0.5
+  )
+  #ax.set_ylim(0, np.max(scatter_y) + 20)
+  ax.tick_params(axis="x", labelsize=48)
+  if(clusters >= 30):
+    font_reduction = 6 * (clusters - 20)/10
+    ax.tick_params(axis="x", labelsize=48 - font_reduction)
+  ax.tick_params(axis="y", labelsize=48)
+  ax.yaxis.set_major_locator(ticker.MultipleLocator(5))
+  ax.set_ylim(0,27)
+  ax.set_xticks(x)
+  string_labels = list()
+  for lbl in average_df.label:
+    if len(str(lbl)) == 1:
+      string_labels.append(str(lbl).zfill(2))
+    else:
+      string_labels.append(str(lbl))
+  ax.set_xticklabels(string_labels)
+  #ax.yaxis.set
+  filename = str(
+    "label_plot_"
+    + str(feature_x)
+    + "_"
+    + str(feature_y)
+    + "_"
+    + str(clusters)
+    + ".png"
+  )
+  if feature_z is not None:
+    filename = str(
+      "label_plot_"
+      + str(feature_x)
+      + "_"
+      + str(feature_y)
+      + "_"
+      + str(feature_z)
+      + "_"
+      + str(clusters)
+      + ".png"
+    )
+  if(include_min_max == True):
+    filename = str(filename[:11] +  "min_max_" + filename[11:])
+  print("filename:",filename)
+  plt.savefig(fig_dir / "plots" /filename, bbox_inches="tight")
+  plt.close("all")
+  return fig_dir / "plots" / filename
+#+END_SRC
+
+#+RESULTS:
+: /Users/antoniomendes/AUC_code/capstone/plots/label_plot_diss_mean_sil_mean_40.png
+
+****** plot_cluter_performance_from_elbow()
+#+BEGIN_SRC python
+def plot_cluster_performance_from_elbow(
+  labels,
+  merged_df_dict,
+  inertia_dict,
+  distortion_dict,
+  feature_key,
+  method = "kmeans",
+  include_min_max = False,
+):
+  key_split = feature_key.split(" + ")
+  features = [get_feature_from_key(f_key) for f_key in feature_key.split(" + ")]
+  data = np.array([get_feature_from_key(f_key) for f_key in feature_key.split(" + ")]).transpose()
+  feature_columns = get_columns_from_keys(feature_key.split(" + "))
+  feature_df = get_feature_df(feature_columns)[2]
+  cluster_amount = [inertia_dict[feature_key], distortion_dict[feature_key]]
+  fig, ax = plt.subplots(1, 2, sharex=False, sharey=True, figsize=(40, 30))
+  elbow_types    = ["inertia", "distortion"]
+  elbow_colors = [
+    '008fd5', 
+    'fc4f30', 
+    'e5ae38', 
+    '6d904f', 
+    '8b8b8b', 
+    '810f7c'
+  ]
+  knees = list()
+  for i,eb in enumerate(elbow_types):
+    kmeans   = KMeans(n_clusters=cluster_amount[i], random_state=0).fit(data)
+    labels   = kmeans.labels_
+    feature_df["label"] = labels
+    merged_feature_df = pd.merge(feature_df, filtered_spotify_df, on=["year","year_country"])
+    merged_df_dict[" + ".join(feature_columns)] = merged_feature_df
+    merged_feature_df = merged_feature_df.dropna(subset=["place_final"])
+    df = pd.DataFrame({
+      "label" : merged_feature_df.label,
+      "place_final" : merged_feature_df.place_final
+    })
+    grouped_df = df.groupby(["label"], sort=True).mean()
+    average_df = pd.DataFrame({
+      "label" : grouped_df.index.to_numpy(),
+      "place_final" : grouped_df["place_final"]
+    })
+    average_df = average_df.sort_values(by=["place_final"], ascending=False)
+    x = np.arange(len(average_df))
+    y = np.array(average_df["place_final"])
+    ax[i].scatter(
+      x,
+      y,
+      s=2000,
+      linewidth=4,
+      #alpha=0.6,
+      edgecolor="k",
+      zorder=1,
+      label = "average"
+    )
+    ax[i].plot(
+      x, y,
+      linewidth=10,
+      color="orange",
+      zorder=0
+    )
+    #ax[i].set_ylabel("=place_final=", labelpad=40, fontsize=60)
+    if(include_min_max == True):
+      grouped_df = df.groupby(["label"], sort=True).max()
+      max_df = pd.DataFrame({
+        "label" : grouped_df.index.to_numpy(),
+        "policy_amnt" : grouped_df["place_final"]
+      })
+      x = np.arange(len(max_df))
+      y = np.array(max_df["place_final"])
+      ax[i].scatter(
+        x,
+        y,
+        s=2000,
+        linewidth=4,
+        marker="^",
+        edgecolor="k",
+        zorder=1,
+        label="max",
+      )
+      grouped_df = df.groupby(["label"], sort=True).min()
+      min_df = pd.DataFrame({
+        "label" : grouped_df.index.to_numpy(),
+        "place_final" : grouped_df["place_final"]
+      })
+      x = np.arange(len(min_df))
+      y = np.array(min_df["place_final"])
+      ax[i].scatter(
+        x,
+        y,
+        s=2000,
+        linewidth=4,
+        marker="v",
+        edgecolor="k",
+        zorder=1,
+        label="min"
+      )
+      ax[i].legend(prop={"size" : 40})
+      #ax[i].set_ylabel("average =place_final=", labelpad=40, fontsize=60)
+    ax[i].set_xlim(
+      np.min(x) -0.5,
+      np.max(x) + 0.5
+    )
+    ax[i].set_title(
+      str(
+        str(cluster_amount[i]) 
+        + " Clusters from " 
+        + elbow_types[i]).title(), 
+      pad=20, 
+      fontsize=60
+    ) 
+    ax[i].set_xlabel("Label", labelpad=40, fontsize=60)
+    ax[i].tick_params(axis="x", labelsize=48)
+    if(cluster_amount[i] >= 30):
+      font_reduction = 6 * (cluster_amount[i] - 20)/10
+      ax[i].tick_params(axis="x", labelsize=48 - font_reduction)
+    ax[i].tick_params(axis="y", labelsize=48)
+    ax[i].yaxis.set_major_locator(ticker.MultipleLocator(5))
+    ax[i].set_ylim(0,27)
+    ax[i].set_xticks(x)
+    string_labels = list()
+    for lbl in average_df.label:
+      if len(str(lbl)) == 1:
+        string_labels.append(str(lbl).zfill(2))
+      else:
+        string_labels.append(str(lbl))
+    ax[i].set_xticklabels(string_labels)
+  first_column   = feature_columns[0]
+  other_columns  = feature_columns[1:]
+  #final_column   = feature_columns[-1]
+  fig.text(0.02, 0.5, 'Place at Finals', va='center', rotation='vertical', fontsize=60)
+  title = str(
+    "Relationship between KMeans Labels, from "
+    + first_column
+    + "\n"
+    + ", ".join(other_columns)
+    + ", and =place_final"
+  )
+  fig.suptitle(title, y=1.05, fontsize = 72)
+  filename = str(
+    "label_elbow_plot"
+    + "_"
+    + "_".join(feature_key.split(" + "))
+    + ".png"
+  )
+  if(include_min_max == True):
+    filename = str(filename[:11] +  "min_max_" + filename[11:])
+  plt.savefig(fig_dir / "plots" /filename, bbox_inches="tight")
+  plt.close("all")
+  return merged_df_dict, fig_dir / "plots" / filename
+#+END_SRC
+
+#+RESULTS:
+
+****** Getting Cluster Plots
+#+BEGIN_SRC python
+best_combinations = list(best_sil_score_dict.keys())
+merged_df_dict = dict()
+inertia_dict = dict()
+distortion_dict = dict()
+path = ""
+#plt.rcParams["font.family"] = "Times New Roman"
+for feature_key in best_combinations:
+  inertia_dict[feature_key], distortion_dict[feature_key], path = plot_elbow_method(feature_key)
+  merged_df_dict, path = plot_cluster_performance_from_elbow(
+    merged_df_dict, 
+    inertia_dict,
+    distortion_dict,
+    feature_key
+  )
+
+path
+#+END_SRC
+
+#+RESULTS:
+: /Users/antoniomendes/AUC_code/capstone/plots/label_elbow_plot_hfc_mean_spec_rms_mean.png
+
+*** Label Analysis
+***** get_label_df()
+#+BEGIN_SRC python
+def get_label_df(feature, outlier_label):
+  merged_df = merged_df_dict[feature]
+  #merged_df["place_final"] = merged_df["place_final"].fillna(0)
+  #merged_df = merged_df.dropna(subset=["place_final"])
+  outlier_df = merged_df[merged_df[feature_to_label_column[feature]] == outlier_label][[
+    "year",
+    "track",
+    "place_final",
+    "genre_name_0",
+    "genre_name_1",
+    #"genre_name_2",
+  ]]
+  return outlier_df.sort_values(by=["year"], ascending=True)
+#+END_SRC
+
+#+RESULTS:
+
+** PCA KMeans
+*** curr_features_list
+#+BEGIN_SRC python
+curr_features_list = [
+  #"lowlevel.mfcc.mean.",
+  #"lowlevel.melbands.dmean.",
+  #"lowlevel.spectral_contrast_coeffs.dmean.",
+  #"lowlevel.spectral_contrast_coeffs.dmean2.",
+  #"lowlevel.spectral_contrast_coeffs.mean.",  
+  "lowlevel.barkbands_flatness_db",             # [200:300]
+  "lowlevel.barkbands_spread",                  # [300:400]
+  "lowlevel.dissonance",                       # [300:400]
+  "lowlevel.erbbands_flatness_db",             # [700:800]
+  "lowlevel.erbbands_spread",                  # [700:800]
+  "lowlevel.hfc",                              # [1100:1200]
+  "lowlevel.silence_rate_30dB",                # [3200:3300]
+  "lowlevel.spectral_energy",                  # [3400:3500]
+  "lowlevel.spectral_energyband_low",          # [3400:3500]
+  "lowlevel.spectral_entropy",                 # [3450:3550]
+  "lowlevel.spectral_flux",                    # [3450:3550]
+  "lowlevel.spectral_kurtosis",                # [3450:3550]
+  "lowlevel.spectral_rms",                     # [3450:3550]
+  "rhythm.beats_loudness",                     # [3550;3700]
+  "tonal.tuning_equal_tempered_deviation",     # [4300:4400]
+  "tonal.tuning_nontempered_energy_ratio",     # [4300:4400]
+]
+#+END_SRC
+
+#+RESULTS:
+
+*** Getting Components
+***** visualise_pca()
+#+BEGIN_SRC python
+def visualise_pca(curr_features_list):
+  X = get_feature_df(get_columns_from_keys(get_feature_keys(curr_features_list)))[3]
+  scaler = StandardScaler()
+  seg_X = scaler.fit_transform(X)
+  #pca = PCA(n_components=2)
+  pca = PCA()
+  pca.fit(seg_X)
+  evr = pca.explained_variance_ratio_
+  #return evr.cumsum()
+  evr_cumsum = evr.cumsum()
+  fig = plt.figure(figsize=(30,30))
+  ax = fig.add_subplot(111)
+  knee = np.where(evr_cumsum >= 0.8)[0][0] + 1
+  ax.vlines(
+    knee,
+    min(evr_cumsum),
+    max(evr_cumsum),
+    linewidth = 10,
+    linestyles="dashed",
+    zorder = 0,
+    label = str("0.8 threshold at " + str(knee) + " components")
+  )
+  ax.plot(
+    range(1,len(evr_cumsum) + 1), 
+    evr_cumsum, 
+    linewidth=10,
+    color="orange",
+    zorder=1
+  )
+  ax.scatter(
+    range(1,len(evr_cumsum) + 1), 
+    evr_cumsum, 
+    s=250,
+    linewidth=1,
+    alpha=0.9,
+    edgecolor="k",
+    zorder=2
+  )
+  ax.set_title("PCA Analysis", pad=20, fontsize=72)
+  ax.set_xlabel("Components", labelpad=40, fontsize=60)
+  ax.set_ylabel("Cummulative Sum of Explained Variance", labelpad=40, fontsize=60)
+  ax.tick_params(axis="x", labelsize=48)
+  ax.tick_params(axis="y", labelsize=48)
+  ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
+  ax.set_ylim(0.0, 1.075)
+  #ax.set_ylim(0.4, 1.075)
+  ax.legend(prop={"size" : 48})
+  filename = "pca_evr_cumsum.pdf"
+  plt.savefig(
+    fig_dir / "plots" / filename,
+    bbox_inches="tight",
+    dpi=fig.dpi
+  )
+  X = None
+  return knee, fig_dir / "plots" / filename
+#+END_SRC
+
+#+RESULTS:
+
+***** running visualise_pca()
+#+BEGIN_SRC python :results file
+components, path = visualise_pca(curr_features_list)
+
+path
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/plots/pca_evr_cumsum.pdf]]
+
+*** Comparing to wihtout PCA
+***** plot_silhouette_pca()
+#+BEGIN_SRC python
+def plot_silhouette_pca(
+  features,
+  components, 
+  method = "pca_kmeans"
+):
+  sil_scores_pca                  = list()
+  sil_scores_pca_fewer_components = list()
+  sil_scores_X                    = list()
+  feature_df, X = get_feature_df(get_columns_from_keys(get_feature_keys(features)))[2:]
+  feature_columns = get_columns_from_keys(get_feature_keys(features))
+  scaler = StandardScaler()
+  seg_X = scaler.fit_transform(X)
+  for n in range(2,41):
+    pca = PCA(n_components = components)
+    scores_pca = pca.fit_transform(seg_X)
+    model = KMeans(n_clusters=n, random_state=0)
+    model = model.fit(scores_pca)
+    labels = model.labels_
+    sil_scores_pca.append(silhouette_score(scores_pca, labels))  
+    pca = PCA(n_components = components - 1)
+    scores_pca = pca.fit_transform(seg_X)
+    model = KMeans(n_clusters=n, random_state=0)
+    model = model.fit(scores_pca)
+    labels = model.labels_
+    sil_scores_pca_fewer_components.append(silhouette_score(scores_pca, labels))  
+    model = model.fit(seg_X)
+    labels = model.labels_
+    sil_scores_X.append(silhouette_score(X, labels))  
+  sil_scores_pca                  = np.array(sil_scores_pca)
+  sil_scores_pca_fewer_components = np.array(sil_scores_pca_fewer_components)
+  sil_scores_X                    = np.array(sil_scores_X)
+  fig = plt.figure(figsize=(40,32))
+  ax = fig.add_subplot(111)
+  x = np.arange(len(sil_scores_X)) + 2
+  y = sil_scores_X
+  ax.plot(
+    x, y, 
+    linewidth=10, 
+    alpha=0.75,
+    #color = "orange",
+    zorder=0,
+    label = "Without PCA"
+  )
+  x = np.arange(len(sil_scores_pca)) + 2
+  y = sil_scores_pca
+  ax.plot(
+    x, y, 
+    linewidth=10, 
+    alpha=0.75,
+    #color = "orange",
+    zorder=0,
+    label = str(str(components) + " Components")
+  )
+  print("hello")
+  ax.plot(
+    x, sil_scores_pca_fewer_components, 
+    linewidth=10, 
+    alpha=0.75,
+    #color = "orange",
+    zorder=0,
+    label = str(str(components - 1) + " Components")
+  )
+  print("there")
+  ax.legend(prop={'size': 40})
+  title = str(
+    "Relationship between Silhouette Score and Number of Clusters"
+    + "\n"
+    + "For "
+    + method.split("_")[0].upper()
+    + " "
+    + method.split("_")[1].title()
+  )
+  ax.set_title(title, pad=80, fontsize=72)
+  ax.set_xlabel("Number of Clusters", labelpad=40, fontsize=60)
+  ax.set_ylabel("Silhouette Score", labelpad=40, fontsize=60)
+  ax.set_ylim(0,1)
+  ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
+  ax.yaxis.set_major_locator(ticker.MultipleLocator(0.2))
+  ax.tick_params(axis='y', labelsize=48)
+  ax.tick_params(axis='x', labelsize=48)
+  filename = str(
+    "sil_scores_"
+    + method
+    + ".png"
+  )
+  plt.savefig(
+    fig_dir / "plots" / filename, 
+    bbox_inches="tight",
+    dpi=fig.dpi
+  )
+  return sil_scores_pca, sil_scores_pca_fewer_components, np.absolute(sil_scores_pca - sil_scores_X), np.absolute(sil_scores_pca_fewer_components - sil_scores_X), fig_dir / "plots" / filename  
+#+END_SRC
+
+#+RESULTS:
+
+***** run plot_silhouette_pca()
+#+BEGIN_SRC python :results file
+pca_kmeans_sil_scores, path = plot_silhouette_pca(curr_features_list, components)
+
+path
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/plots/pca_evr_cumsum.pdf]]
+
+***** plot_silhouette_pca_02()
+#+BEGIN_SRC python
+def plot_silhouette_pca_02(
+  features,
+  components, 
+  method = "pca_kmeans"
+):
+  sil_scores_pca                  = list()
+  sil_scores_pca_fewer_components = list()
+  sil_scores_X                    = list()
+  feature_df, X = get_feature_df(get_columns_from_keys(get_feature_keys(features)))[2:]
+  feature_columns = get_columns_from_keys(get_feature_keys(features))
+  scaler = StandardScaler()
+  seg_X = scaler.fit_transform(X)
+  fig = plt.figure(figsize=(40,32))
+  ax = fig.add_subplot(111)
+  for i in range(len(components) + 1):
+    sil_scores = list()
+    if i == 0:
+      for n in range(2, 41):
+        model = KMeans(n_clusters=n, random_state=0)
+        model = model.fit(X)
+        labels = model.labels_
+        sil_scores.append(silhouette_score(X,labels))
+        x = np.arange(len(sil_scores)) + 2
+        y = sil_scores
+      ax.plot(
+        x, y, 
+        linewidth=10, 
+        #alpha=0.75,
+        zorder=0,
+        label = "Without PCA"
+      )
+    else: 
+      for n in range(2, 41):
+        pca = PCA(n_components = components[i-1])
+        scores_pca = pca.fit_transform(seg_X)
+        model  = KMeans(n_clusters=n, random_state=0)
+        model  = model.fit(scores_pca)
+        labels = model.labels_
+        sil_scores.append(silhouette_score(scores_pca, labels))
+      x = np.arange(len(sil_scores)) + 2
+      y = sil_scores
+      ax.plot(
+        x, y, 
+        linewidth=10, 
+        alpha=0.5,
+        label = str(str(components[i-1]) + " Components")
+      )
+  ax.legend(prop={'size': 60})
+  title = str(
+    "Relationship between Silhouette Score and Number of Clusters"
+    + "\n"
+    + "For "
+    + method.split("_")[0].upper()
+    + " "
+    + method.split("_")[1].title()
+  )
+  ax.set_title(title, pad=80, fontsize=72)
+  ax.set_xlabel("Number of Clusters", labelpad=40, fontsize=60)
+  ax.set_ylabel("Silhouette Score", labelpad=40, fontsize=60)
+  ax.set_ylim(0,1)
+  ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
+  ax.yaxis.set_major_locator(ticker.MultipleLocator(0.2))
+  ax.tick_params(axis='y', labelsize=48)
+  ax.tick_params(axis='x', labelsize=48)
+  filename = str(
+    "sil_scores_multi_"
+    + method
+    + ".pdf"
+  )
+  plt.savefig(
+    fig_dir / "plots" / filename, 
+    bbox_inches="tight",
+    dpi=fig.dpi
+  )
+  return fig_dir / "plots" / filename  
+#+END_SRC
+
+#+RESULTS:
+
+***** run plot_silhouette_pca_02()
+#+BEGIN_SRC python :results file
+plot_silhouette_pca_02(curr_features_list, list(range(2,7)))
+
+components = 2
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/plots/sil_scores_multi_pca_kmeans.pdf]]
+
+*** Getting Inertia/Distortion
+***** imp_pca_elbow_method()
+#+BEGIN_SRC python
+def imp_pca_elbow_method(components, curr_features, method="pca_kmeans"):
+  X = get_feature_df(get_columns_from_keys(get_feature_keys(curr_features)))[3]
+  scaler = StandardScaler()
+  seg_X = scaler.fit_transform(X)
+  pca = PCA(n_components = components)
+  scores_pca = pca.fit_transform(seg_X)
+  distortions = list()
+  inertias = list()
+  for n in range(2,41):
+    model = KMeans(n_clusters=n, random_state=0)
+    if method == "pca_hierarchical":
+      model = AgglomerativeClustering(n_clusters=n)
+    model = model.fit(scores_pca)
+    distortion = np.sum(np.min(
+      cdist(
+        scores_pca, 
+        model.cluster_centers_,
+        "euclidean"
+      ),
+      axis =1
+    ))
+    distortions.append(distortion)
+    inertias.append(model.inertia_)
+  title = str(
+    "Elbow Method for"
+    + "\n"
+    + ", ".join(get_columns_from_keys(get_feature_keys(curr_features)))
+  )
+  if method == "pca_kmeans" or method == "pca_hierarchical":
+    title = str("Elbow Method for KMeans with PCA clustering")
+  fig, ax = plt.subplots(2, 1, sharex=True, sharey=False, figsize=(40,32))
+  elbow_types    = ["inertia", "distortion"]
+  elbow_features = [inertias, distortions]
+  elbow_colors = [
+    '008fd5', 
+    'fc4f30', 
+    'e5ae38', 
+    '6d904f', 
+    '8b8b8b', 
+    '810f7c'
+  ]
+  knees = list()
+  for i,eb in enumerate(elbow_types):
+    x = np.arange(len(elbow_features[i])) + 2
+    y = elbow_features[i]
+    ax[i].plot(
+      x, y,
+      label = elbow_types[i],
+      linewidth = 10,
+      color = tuple(int(elbow_colors[i][j:j+2], 16)/256 for j in (0, 2, 4))
+    )
+    kn = KneeLocator(x,y, curve="convex", direction="decreasing")
+    ax[i].vlines(
+      kn.knee,
+      0,
+      max(y),
+      linewidth  = 12,
+      linestyles = "dashed"
+    )
+    knees.append(kn.knee)
+    fig.text(0.5, 0.02, 'Number of Clusters', ha='center', fontsize =60)
+    ax[i].set_ylabel(
+      elbow_types[i].title(),
+      labelpad = 40,
+      fontsize = 60,
+    )
+    ax[i].xaxis.set_major_locator(ticker.MultipleLocator(2))
+    ax[i].tick_params(axis='x', labelsize=40)
+    ax[i].set_xticks(x)
+    string_labels = list()
+    for tick in x:
+      if len(str(tick)) == 1:
+        string_labels.append(str(tick).zfill(2))
+      else:
+        string_labels.append(str(tick))
+    ax[i].set_xticklabels(string_labels)
+    ax[i].tick_params(axis='y', labelsize=48)
+  fig.suptitle(
+    title, 
+    fontsize=72
+  )
+  filename = str(
+    "elbow_"
+    #+ "_".join([key.lower() for key in feature_key.split(" + ")])
+    + ".png"
+  )
+  if method == "pca_kmeans" or method == "pca_hierarchical":
+    filename = str(
+      "elbow_"
+      + "pca_"
+      + method.split("_")[1]
+      + ".pdf"
+    )
+  plt.savefig(fig_dir / "plots" / "elbow" / filename, bbox_inches="tight")
+  plt.close("all")
+  return knees[0], knees[1], fig_dir / "plots" / "elbow" / filename
+#+END_SRC
+
+#+RESULTS:
+
+***** running imp_pca_elbow_method()
+#+BEGIN_SRC python :results file
+pca_inertia_clusters, pca_distortion_clusters, path = imp_pca_elbow_method(components, curr_features_list)
+
+path
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/plots/elbow/elbow_pca_kmeans.pdf]]
+
+*** Plotting Clusters
+***** plot_clusters_pca() for inertia + distortion + average
+#+BEGIN_SRC python
+def plot_clusters_pca_inertia_distortion_average(
+  features, components, 
+  inertia_clusters, 
+  distortion_clusters, 
+  method = "pca_kmeans"
+):
+  merged_df_dict=dict()
+  feature_df, X = get_feature_df(get_columns_from_keys(get_feature_keys(features)))[2:]
+  feature_columns = get_columns_from_keys(get_feature_keys(features))
+  scaler = StandardScaler()
+  seg_X = scaler.fit_transform(X)
+  pca = PCA(n_components = components)
+  scores_pca = pca.fit_transform(seg_X)
+  cluster_amount = [inertia_clusters, distortion_clusters]
+  cluster_amnt_average = int(np.sum(cluster_amount)/len(cluster_amount))
+  #cluster_amnt_average = np.max(cluster_amount) - 1
+  #cluster_amnt_average = 40
+  cluster_amount.append(cluster_amnt_average)
+  fig, ax = plt.subplots(1, 3, sharex=False, sharey=True, figsize=(50, 30))
+  elbow_types    = ["inertia", "distortion", "average"]
+  elbow_colors = [
+    '008fd5', 
+    'fc4f30', 
+    'e5ae38', 
+    '6d904f', 
+    '8b8b8b', 
+    '810f7c'
+  ]
+  for i,eb in enumerate(elbow_types):
+    #model = KMeans(n_clusters=cluster_amount[i], random_state=0).fit(seg_X)
+    model = KMeans(n_clusters=cluster_amount[i], random_state=0).fit(scores_pca)
+    if method == "pca_hierarchical":
+      model = AgglomerativeClustering(n_clusters=cluster_amount[i]).fit(seg_X)
+    labels   = model.labels_
+    feature_df["label"] = labels
+    merged_feature_df = pd.merge(feature_df, filtered_spotify_df, on=["year","year_country"])
+    merged_df_dict[elbow_types[i]] = merged_feature_df
+    merged_feature_df = merged_feature_df.dropna(subset=["place_final"])
+    df = pd.DataFrame({
+      "label" : merged_feature_df.label,
+      "place_final" : merged_feature_df.place_final
+    })
+    grouped_df = df.groupby(["label"], sort=True).mean()
+    average_df = pd.DataFrame({
+      "label" : grouped_df.index.to_numpy(),
+      "place_final" : grouped_df["place_final"]
+    })
+    average_df = average_df.sort_values(by=["place_final"], ascending=False)
+    x = np.arange(len(average_df))
+    y = np.array(average_df["place_final"])
+    ax[i].scatter(
+      x,
+      y,
+      s=2000,
+      linewidth=4,
+      #alpha=0.6,
+      edgecolor="k",
+      zorder=1,
+    )
+    ax[i].plot(
+      x, y,
+      linewidth=10,
+      color="orange",
+      zorder=0
+    )
+    ax[i].set_xlim(
+      np.min(x) -0.5,
+      np.max(x) + 0.5
+    )
+    ax[i].set_title(
+      str(
+        str(cluster_amount[i]) 
+        + " Clusters from " 
+        + elbow_types[i]).title(), 
+      pad=20, 
+      fontsize=60
+    ) 
+    ax[i].set_xlabel("Label", labelpad=40, fontsize=60)
+    ax[i].tick_params(axis="x", labelsize=42)
+    if(cluster_amount[i] >= 30):
+      font_reduction = 6 * (cluster_amount[i] - 20)/10
+      ax[i].tick_params(axis="x", labelsize=48 - font_reduction)
+    ax[i].tick_params(axis="y", labelsize=48)
+    ax[i].yaxis.set_major_locator(ticker.MultipleLocator(5))
+    ax[i].set_ylim(0,27)
+    ax[i].set_xticks(x)
+    string_labels = list()
+    for lbl in average_df.label:
+      if len(str(lbl)) == 1:
+        string_labels.append(str(lbl).zfill(2))
+      else:
+        string_labels.append(str(lbl))
+    ax[i].set_xticklabels(string_labels)
+  fig.text(0.02, 0.5, 'Place at Finals', va='center', rotation='vertical', fontsize=60)
+  title = str(
+    "Relationship between "
+    + method.split("_")[0].upper()
+    + " "
+    + method.split("_")[1].title()
+    + "\n"
+    + "Labels and Place at Finals"
+  )
+  fig.suptitle(title, y=1.05, fontsize = 72)
+  filename = str(
+    "label_plot"
+    + "_"
+    + method
+    + "_"
+    + "_".join(elbow_types)
+    + "_"
+    + str(cluster_amnt_average)
+    + ".png"
+  )
+  plt.savefig(fig_dir / "plots" /filename, bbox_inches="tight")
+  plt.close("all")
+  return labels, cluster_amnt_average, fig_dir / "plots" / filename
+#+END_SRC
+
+ #+RESULTS:
+***** plot_clusters_pca() for inertia + distortion + between
+#+BEGIN_SRC python
+def plot_clusters_pca_inertia_distortion_between(
+  features, components, 
+  inertia_clusters, 
+  distortion_clusters, 
+  method = "pca_kmeans",
+  between_value = None
+):
+  merged_df_dict=dict()
+  feature_df, X = get_feature_df(get_columns_from_keys(get_feature_keys(features)))[2:]
+  feature_columns = get_columns_from_keys(get_feature_keys(features))
+  scaler = StandardScaler()
+  seg_X = scaler.fit_transform(X)
+  pca = PCA(n_components = components)
+  scores_pca = pca.fit_transform(seg_X)
+  cluster_amount = [inertia_clusters, distortion_clusters]
+  cluster_amnt_between = int(np.sum(cluster_amount)/len(cluster_amount))
+  if between_value is not None:
+    cluster_amnt_between = between_value
+  cluster_amount.append(cluster_amnt_between)
+  fig, ax = plt.subplots(1, 3, sharex=False, sharey=True, figsize=(50, 30))
+  elbow_types    = ["inertia", "distortion", "between"]
+  elbow_colors = [
+    '008fd5', 
+    'fc4f30', 
+    'e5ae38', 
+    '6d904f', 
+    '8b8b8b', 
+    '810f7c'
+  ]
+  for i,eb in enumerate(elbow_types):
+    model = KMeans(n_clusters=cluster_amount[i], random_state=0).fit(scores_pca)
+    labels   = model.labels_
+    feature_df["label"] = labels
+    merged_feature_df = pd.merge(feature_df, filtered_spotify_df, on=["year","year_country"])
+    merged_df_dict[elbow_types[i]] = merged_feature_df
+    merged_feature_df = merged_feature_df.dropna(subset=["place_final"])
+    df = pd.DataFrame({
+      "label" : merged_feature_df.label,
+      "place_final" : merged_feature_df.place_final
+    })
+    grouped_df = df.groupby(["label"], sort=True).mean()
+    average_df = pd.DataFrame({
+      "label" : grouped_df.index.to_numpy(),
+      "place_final" : grouped_df["place_final"]
+    })
+    average_df = average_df.sort_values(by=["place_final"], ascending=False)
+    x = np.arange(len(average_df))
+    y = np.array(average_df["place_final"])
+    ax[i].scatter(
+      x,
+      y,
+      s=2000,
+      linewidth=4,
+      #alpha=0.6,
+      edgecolor="k",
+      zorder=1,
+    )
+    ax[i].plot(
+      x, y,
+      linewidth=10,
+      color="orange",
+      zorder=0
+    )
+    ax[i].set_xlim(
+      np.min(x) -0.5,
+      np.max(x) + 0.5
+    )
+    ax[i].set_title(
+      str(
+        str(cluster_amount[i]) 
+        + " Clusters from " 
+        + elbow_types[i]).title(), 
+      pad=20, 
+      fontsize=60
+    ) 
+    ax[i].set_xlabel("Label", labelpad=40, fontsize=60)
+    ax[i].tick_params(axis="x", labelsize=48)
+    if(cluster_amount[i] >= 30):
+      font_reduction = 8 * (cluster_amount[i] - 20)/10
+      ax[i].tick_params(axis="x", labelsize=48 - font_reduction)
+    ax[i].tick_params(axis="y", labelsize=48)
+    ax[i].yaxis.set_major_locator(ticker.MultipleLocator(5))
+    ax[i].set_ylim(0,27)
+    ax[i].set_xticks(x)
+    string_labels = list()
+    for lbl in average_df.label:
+      if len(str(lbl)) == 1:
+        string_labels.append(str(lbl).zfill(2))
+      else:
+        string_labels.append(str(lbl))
+    ax[i].set_xticklabels(string_labels)
+  fig.text(0.02, 0.5, 'Place at Finals', va='center', rotation='vertical', fontsize=60)
+  title = str(
+    "Relationship between "
+    + method.split("_")[0].upper()
+    + " "
+    + method.split("_")[1].title()
+    + "\n"
+    + "Labels and Place at Finals"
+  )
+  fig.suptitle(title, y=1.05, fontsize = 72)
+  filename = str(
+    "label_plot"
+    + "_"
+    + method
+    + "_"
+    + "_".join(elbow_types)
+    + "_"
+    + str(cluster_amnt_between)
+    + ".pdf"
+  )
+  plt.savefig(fig_dir / "plots" /filename, bbox_inches="tight")
+  plt.close("all")
+  return labels, cluster_amnt_between, fig_dir / "plots" / filename
+#+END_SRC
+
+#+RESULTS:
+
+***** running plot_clusters_pca() between
+#+BEGIN_SRC python :results file
+labels, cluster_amnt_between, path = plot_clusters_pca_inertia_distortion_between(
+  curr_features_list, 
+  components, 
+  pca_inertia_clusters, 
+  pca_distortion_clusters,
+  between_value = 10
+)
+
+labels, cluster_amnt_between, path = plot_clusters_pca_inertia_distortion_between(
+  curr_features_list, 
+  components, 
+  pca_inertia_clusters, 
+  pca_distortion_clusters,
+)
+
+labels, cluster_amnt_between, path = plot_clusters_pca_inertia_distortion_between(
+  curr_features_list, 
+  components, 
+  pca_inertia_clusters, 
+  pca_distortion_clusters,
+  between_value = 12
+)
+
+path
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/plots/label_plot_pca_kmeans_inertia_distortion_between_12.pdf]]
+
+***** boxplot_pca()
+#+BEGIN_SRC python
+def boxplot_pca(
+  features, 
+  components, 
+  cluster_amount,
+  method = "pca_kmeans"
+):
+  feature_df, X = get_feature_df(get_columns_from_keys(get_feature_keys(features)))[2:]
+  feature_columns = get_columns_from_keys(get_feature_keys(features))
+  scaler = StandardScaler()
+  seg_X = scaler.fit_transform(X)
+  pca = PCA(n_components = components)
+  scores_pca = pca.fit_transform(seg_X)
+  fig = plt.figure(figsize=(40, 30))
+  ax  = fig.add_subplot(111)
+  model = KMeans(n_clusters=cluster_amount, random_state=0).fit(scores_pca)
+  labels   = model.labels_
+  feature_df["label"] = labels
+  merged_feature_df = pd.merge(feature_df, filtered_spotify_df, on=["year","year_country"])
+  merged_feature_df = merged_feature_df.dropna(subset=["place_final"])
+  df = pd.DataFrame({
+    "label" : merged_feature_df.label,
+    "place_final" : merged_feature_df.place_final
+  })
+  grouped_df = df.groupby(["label"], sort=True).mean()
+  average_df = pd.DataFrame({
+    "label" : grouped_df.index.to_numpy(),
+    "place_final" : grouped_df["place_final"]
+  })
+  average_df = average_df.sort_values(by=["place_final"], ascending=False)
+  input_list = list()
+  label_list = list()
+  for i,lbl in enumerate(average_df.label):
+    label_list.append(lbl)
+    input_list.append(np.array(df[df.label == lbl].place_final))
+  fivethirtyeight_colors = [
+    '008fd5', # blue
+    'fc4f30', # red
+    'e5ae38', # yellow
+    '6d904f', # green
+    '8b8b8b', # gray
+    'bbbbbb', # lightgray
+    'cfcfcf', # lightlightgray
+    '810f7c', # purple
+  ]
+  rgb_colors = list()
+  for color in fivethirtyeight_colors:
+    rgb_colors.append(tuple(int(color[j:j+2], 16)/256 for j in (0, 2, 4)))
+  #print("rgb_colors:",rgb_colors)
+  bp = ax.boxplot(
+   input_list,
+   boxprops     = dict(linewidth=10, color=rgb_colors[5]),
+   flierprops   = dict(marker='o', markersize=50, markerfacecolor=rgb_colors[1], alpha=0.0),
+   medianprops  = dict(linestyle='-.',linewidth=5, color=rgb_colors[0], alpha=0.0),
+   meanprops    = dict(marker='X', markersize=50, color=rgb_colors[2], alpha=0.0),
+   whiskerprops = dict(linestyle='-', linewidth=10, color=rgb_colors[4]),
+   capprops     = dict(linewidth=10, color=rgb_colors[5]),
+   showmeans = True,
+   zorder = 1,
+  )
+  min_values = list()
+  first_qrt  = list()
+  third_qrt  = list()
+  max_values = list()
+  for i in range(0,len(bp["whiskers"]), 2):
+    min_values.append(bp["whiskers"][i].get_data()[1][1])
+    first_qrt.append(bp["whiskers"][i].get_data()[1][0])
+    third_qrt.append(bp["whiskers"][i + 1].get_data()[1][0])
+    max_values.append(bp["whiskers"][i + 1].get_data()[1][1])
+  x = list()
+  medians = list()
+  for i, median in enumerate(bp["medians"]):
+    x.append(median.get_data()[0])
+    medians.append(bp["medians"][i].get_data()[1])
+  medians = np.array(medians)
+  for i in range(0, len(x)):
+    ax.plot(
+      x[i], medians[i],
+      linewidth = 5,
+      linestyle = '-.',
+      color = rgb_colors[0],
+    )
+    if i == 0:
+      ax.plot(
+        x[i], medians[i],
+        linewidth = 5,
+        linestyle = '-.',
+        color = rgb_colors[0],
+        label = "median",
+      )
+  means = list()
+  for i, mean in enumerate(bp["means"]):
+    means.append([
+      bp["means"][i].get_data()[0],
+      bp["means"][i].get_data()[1]
+    ])
+  means = np.array(means)
+  ax.scatter(
+    means[:,0], means[:,1],
+    s = 3000,
+    marker = "X",
+    c = rgb_colors[2],
+    alpha = 0.75,
+    label = "mean",
+  )
+  fliers = list()
+  flier_count = 0
+  for i, flier in enumerate(bp["fliers"]):
+    if(len(bp["fliers"][i].get_data()[0]) > 0):
+      flier_count += 1
+      fliers.append([bp["fliers"][i].get_data()[0], bp["fliers"][i].get_data()[1]])
+  fliers = np.array(fliers)
+  if flier_count > 0:
+    print("outliers exists!")
+    ax.scatter(
+      fliers[:,0], fliers[:,1],
+      s = 1000,
+      marker = "o",
+      c = rgb_colors[1],
+      linewidth = 3,
+      edgecolor=rgb_colors[4],
+      alpha = 0.75,
+      label = "outlier"
+    )
+  print("there")
+  ax.legend(prop={'size': 48})
+  title = str(
+    "Relationship between "
+    + method.split("_")[0].upper()
+    + " "
+    + method.split("_")[1].title()
+    + "\n"
+    + "Labels and Place at Finals"
+    + " for "
+    + str(cluster_amount)
+    + " Clusters"
+  )
+  ax.set_title(title, pad=20, fontsize = 72)
+  ax.set_xlabel("Label", labelpad=40, fontsize=60)
+  ax.set_ylabel("Place at Finals", labelpad=40, fontsize = 60)
+  string_labels = list()
+  for lbl in label_list:
+    if len(str(lbl)) == 1:
+      string_labels.append(str(lbl).zfill(2))
+    else:
+      string_labels.append(str(lbl))
+  ax.set_xticks(np.arange(len(label_list)) + 1)
+  ax.set_xticklabels(string_labels)
+  ax.tick_params(axis="x", labelsize=48)
+  ax.tick_params(axis="y", labelsize=48)
+  ax.set_ylim(-2,28)
+  ax.yaxis.set_major_locator(ticker.MultipleLocator(5))
+  filename = str(
+    "boxplot"
+    + "_"
+    + method
+    + "_"
+    + str(cluster_amount)
+    + ".png"
+  )
+  plt.savefig(fig_dir / "plots"/ filename, bbox_inches="tight")
+  return labels, min_values, first_qrt, third_qrt, max_values, medians, means, fliers, fig_dir / "plots"/ filename
+#+END_SRC
+
+#+RESULTS:
+
+***** running box_plot_pca()
+#+BEGIN_SRC python
+labels, min_values, first_qrt, third_qrt, max_values, medians, means, fliers, path = boxplot_pca(
+  curr_features_list, 
+  components, 
+  9
+)
+
+labels, min_values, first_qrt, third_qrt, max_values, medians, means, fliers, path = boxplot_pca(
+  curr_features_list, 
+  components, 
+  10
+)
+
+labels, min_values, first_qrt, third_qrt, max_values, medians, means, fliers, path = boxplot_pca(
+  curr_features_list, 
+  components, 
+  11
+)
+
+labels, min_values, first_qrt, third_qrt, max_values, medians, means, fliers, path = boxplot_pca(
+  curr_features_list, 
+  components, 
+  12
+)
+
+labels, min_values, first_qrt, third_qrt, max_values, medians, means, fliers, path = boxplot_pca(
+  curr_features_list, 
+  components, 
+  13
+)
+#+END_SRC
+
+#+RESULTS:
+
+*** Finding Best/Worst Songs 
+Specifications:
+ - Components : 2
+ - Clusters   : 12
+
+***** Specifications
+#+BEGIN_SRC python
+components = 2
+clusters   = 12
+#+END_SRC
+
+#+RESULTS:
+
+***** Final Model
+#+BEGIN_SRC python
+feature_df, X = get_feature_df(get_columns_from_keys(get_feature_keys(curr_features_list)))[2:]
+feature_columns = get_columns_from_keys(get_feature_keys(curr_features_list))
+scaler = StandardScaler()
+seg_X = scaler.fit_transform(X)
+pca = PCA(n_components = components)
+scores_pca = pca.fit_transform(seg_X)
+fig = plt.figure(figsize=(40, 30))
+ax  = fig.add_subplot(111)
+model = KMeans(n_clusters=clusters, random_state=0).fit(scores_pca)
+labels   = model.labels_
+for i in range(scores_pca.shape[1]):
+  feature_df[str(
+    "pca_score_" 
+    + str(i)
+  )] = scores_pca[:,i]
+
+feature_df["label"] = labels
+#+END_SRC
+
+#+RESULTS:
+
+***** Distances to Cluster Centers
+#+BEGIN_SRC python
+centroids = model.cluster_centers_
+distance_from_center = list()
+
+for i in range(len(feature_df)):
+  lbl = feature_df.iloc[i].label
+  current_center = np.array([centroids[lbl]])
+  scores = np.array([scores_pca[i,:]])
+  distance = cdist(scores, current_center)
+  distance_from_center.append(float(distance[0]))
+
+feature_df["distance_from_center"] = distance_from_center
+
+merged_feature_df = pd.merge(feature_df, filtered_spotify_df, on=["year","year_country"])
+#+END_SRC
+
+#+RESULTS:
+
+***** Worst Cluster Data
+#+BEGIN_SRC python
+worst_cluster_df = merged_feature_df[merged_feature_df.label == 6].sort_values(
+  by=["distance_from_center"], 
+  ascending=True
+)
+
+worst_cluster_df[[
+  "year_country",
+  "track",
+  "label",
+  "distance_from_center",
+  "place_final"
+]]
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+             year_country                                   track  label  distance_from_center  place_final
+127           2012-France                        Echo (You and I)      6              0.789030         22.0
+176   2018-Czech Republic                 Lie to Me - ESC Version      6              0.862079          6.0
+218          2012-Ireland                               Waterline      6              1.147285         19.0
+284          2012-Belarus                       We Are the Heroes      6              1.907800          NaN
+179         2015-Slovenia               Here for You - Radio Edit      6              2.114024         14.0
+237          2012-Austria                      Woki mit deim Popo      6              2.219203          NaN
+51           2014-Romania  Miracle (Eurovision Song Contest 2014)      6              2.351578         12.0
+162           2012-Norway                                    Stay      6              2.506686         26.0
+5    2014-North Macedonia       To the sky ( Where do we go now )      6              2.555697          NaN
+98        2013-Montenegro  Igranka - Eurovision 2013 - Montenegro      6              2.637917          NaN
+128           2011-Latvia                       Angel In Disguise      6              3.764333          NaN
+270         2018-Slovenia                                Hvala Ne      6              4.153706         22.0
+#+end_example
+
+***** Best Cluster Data
+#+BEGIN_SRC python
+best_cluster_df = merged_feature_df[merged_feature_df.label == 1].sort_values(
+  by=["distance_from_center"], 
+  ascending=True
+)
+
+best_cluster_df[[
+  "year_country",
+  "track",
+  "label",
+  "distance_from_center",
+  "place_final"
+]]
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+         year_country                                         track  label  distance_from_center  place_final
+199   2013-Azerbaijan                        Hold me - Full Version      1              0.369338          2.0
+70       2011-Moldova                                      So Lucky      1              0.493725         12.0
+180       2010-Sweden                               This Is My Life      1              0.516193          NaN
+197  2010-Netherlands              Ik Ben Verliefd (sha - La - Lie)      1              0.537736          NaN
+198   2019-Montenegro                                        Heaven      1              0.593853          NaN
+209  2015-Netherlands                                    Walk Along      1              0.814427          NaN
+137       2015-Russia                              A Million Voices      1              1.018144          2.0
+89       2015-Georgia           Warrior - Eurovision 2015 - Georgia      1              1.061204         11.0
+241      2013-Moldova                                         O Mie      1              1.124369         11.0
+281       2010-Greece                                           Opa      1              1.172750          8.0
+247      2011-Albania                                     Kënga Ime      1              1.182675          NaN
+190      2019-Estonia                                         Storm      1              1.184182         20.0
+279       2015-Serbia  Beauty Never Lies - Eurovision 2015 - Serbia      1              1.207740         10.0
+40   2019-Switzerland                                    She Got Me      1              1.231571          4.0
+221       2013-Russia                                       What If      1              1.279285          5.0
+#+end_example
