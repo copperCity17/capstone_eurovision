@@ -1,0 +1,2152 @@
+#+TITLE: Exploring Spotify Genres
+#+AUTHOR: Antonio Mendes
+#+EMAIL: <antonio.mendes@mlprograms.com>
+#+DATE: 17 / 04 / 2020
+#+PROPERTY: header-args :exports both :session spot_exp :results value
+
+* Introduction
+* Preparation
+** Imports
+*** standard
+#+BEGIN_SRC python
+  import numpy as np
+  import pandas as pd
+  from collections import Counter
+  import math
+#+END_SRC
+
+#+RESULTS:
+
+*** matplotlib
+#+BEGIN_SRC python
+  import matplotlib.pyplot as plt
+  plt.style.use("fivethirtyeight")
+  import matplotlib.ticker as ticker
+  plt.rcParams["font.family"] = "Times New Roman"
+#+END_SRC
+
+#+RESULTS:
+
+*** os
+#+BEGIN_SRC python
+import os
+from pathlib import Path
+cwd = os.path.abspath(os.getcwd())
+fig_dir = Path("/".join(cwd.split("/")[:-1])) / "capstone"
+fig_dir
+#+END_SRC
+
+#+RESULTS:
+: /Users/antoniomendes/AUC_code/capstone
+
+*** spotipy
+#+BEGIN_SRC python
+import spotipy
+import spotipy.util as util
+from spotipy import oauth2
+#+END_SRC
+
+#+RESULTS:
+
+** Spotify Client
+#+BEGIN_SRC python
+  token = oauth2.SpotifyClientCredentials(
+      client_id = "2cb187373b41486e92ac0fb58daa3473",
+      client_secret="b8687a7e4c8141d38c3272c55d255e7d"
+  )
+
+  cache_token = token.get_access_token()
+
+  spotify = spotipy.Spotify(cache_token)
+
+  USER = "coppercity17"
+
+  client = spotipy.client.Spotify(auth=cache_token)
+#+END_SRC 
+
+#+RESULTS:
+
+** Getting the Data
+*** setting some global variables
+#+BEGIN_SRC python
+  no_genre_count = 0
+  genres_per_song = list()
+  songs = list()
+#+END_SRC
+
+#+RESULTS:
+
+*** 2017
+#+BEGIN_SRC python
+  EUROVISION_2017_PLAYLIST = "6Ey20ccpxRCd0AlaIuGJrB"
+  EUROVISION_2017_PLAYLIST = "0VEtwmjx3FK77jWLlI16EV"
+
+  results_2017 = spotify.user_playlist_tracks(USER, EUROVISION_2017_PLAYLIST, limit=100, offset=0)
+
+  eurovision_2017_genres = list()
+  songs_2017 = list()
+
+  for i,track in enumerate(results_2017['items']):
+      artist = client.artist(track['track']['artists'][0]['id'])
+      genres_per_song.append(artist['genres'])
+      songs.append(track['track']['name'])
+      songs_2017.append(track['track'])
+      if(len(artist['genres']) == 0):
+          no_genre_count += 1
+      for genre in  artist['genres']:
+            eurovision_2017_genres.append(genre)
+
+#+END_SRC
+
+#+RESULTS:
+
+# spotify:playlist:6Ey20ccpxRCd0AlaIuGJrB
+# spotify:playlist:0VEtwmjx3FK77jWLlI16EV
+
+#+RESULTS:
+
+*** 2018
+#+BEGIN_SRC python
+  EUROVISION_2018_PLAYLIST = "5sxwk5T34E2l2Ng02lipHS"
+
+  results_2018 = spotify.user_playlist_tracks(USER, EUROVISION_2018_PLAYLIST, limit=100, offset=0)
+
+  eurovision_2018_genres = list()
+
+  for i,track in enumerate(results_2018['items']):
+      artist = client.artist(track['track']['artists'][0]['id'])
+      genres_per_song.append(artist['genres'])
+      songs.append(track['track']['name'])
+      if(len(artist['genres']) == 0):
+          no_genre_count += 1      
+      for genre in  artist['genres']:
+          eurovision_2018_genres.append(genre)
+
+#+END_SRC
+
+#+RESULTS:
+
+*** 2019
+#+BEGIN_SRC python
+  EUROVISION_2019_PLAYLIST = "3ZdQUt8Tmtt7oOU8UM2koe"
+
+  results_2019 = spotify.user_playlist_tracks(USER, EUROVISION_2019_PLAYLIST, limit=100, offset=0)
+
+  eurovision_2019_genres = list()
+
+  for i,track in enumerate(results_2019['items']):
+      artist = client.artist(track['track']['artists'][0]['id'])
+      genres_per_song.append(artist['genres'])
+      songs.append(track['track']['name'])
+      if(len(artist['genres']) == 0):
+          no_genre_count += 1
+      for genre in artist['genres']:
+          eurovision_2019_genres.append(genre)
+
+#+END_SRC
+
+#+RESULTS:
+
+*** Playist ID's
+#+BEGIN_SRC 
+# 2000: spotify:playlist:6twijwW7TCnEOUPLrTFg4U
+# 2001: spotify:playlist:7h1GLSuZWJSyJnziShtBQm
+# 2002: spotify:playlist:5z4rV74eVbTEh68SR5p1wX
+# 2003: spotify:playlist:3sxozYHQFvZ9yoZI0irRnA
+# 2004: spotify:playlist:5fGHP7oZzm9VE7DOW1a61e
+# 2005: spotify:playlist:7gubzwf45FI6Vuz8YqxoAC
+# 2006: spotify:playlist:6JHVNBiQrZK8jZbPJo3IQe
+# 2007: spotify:playlist:3b7eCqwUaI15OkKf1ew7bC
+# 2008: spotify:playlist:2W6Km8zv5P0Dwro0RJ0d9E
+# 2009: spotify:playlist:3st0vXSmuEuQC2QlPMMuc6
+
+# 2010: spotify:playlist:5VqYaQDMWRzR5bOCKBvLF8
+# 2011: spotify:playlist:4HPdL5jwsxKnh7RTAwq9hF
+# 2012: spotify:playlist:5tjy5qbWxaFFFTseRDptC7
+# 2013: spotify:playlist:2YPpTFZPn6s1y7q8PFRLv7
+# 2014: spotify:playlist:3svTn0yv1hfv8vzMzVd31D
+# 2015: spotify:playlist:1HtXxHLxLvC5ePfd0hQC7U
+# 2016: spotify:playlist:0VEtwmjx3FK77jWLlI16EV
+# 2017: spotify:playlist:6Ey20ccpxRCd0AlaIuGJrB
+# 2018: spotify:playlist:5sxwk5T34E2l2Ng02lipHS
+# 2019: spotify:playlist:3ZdQUt8Tmtt7oOU8UM2koe
+#+END_SRC
+
+#+BEGIN_SRC python
+playlist_id_dict = {
+  "2000" : "6twijwW7TCnEOUPLrTFg4U",
+  "2001" : "7h1GLSuZWJSyJnziShtBQm",
+  "2002" : "5z4rV74eVbTEh68SR5p1wX",
+  "2003" : "3sxozYHQFvZ9yoZI0irRnA",
+  "2004" : "5fGHP7oZzm9VE7DOW1a61e",
+  "2005" : "7gubzwf45FI6Vuz8YqxoAC",
+  "2006" : "6JHVNBiQrZK8jZbPJo3IQe",
+  "2007" : "3b7eCqwUaI15OkKf1ew7bC",
+  "2008" : "2W6Km8zv5P0Dwro0RJ0d9E",
+  "2009" : "3st0vXSmuEuQC2QlPMMuc6",
+  "2010" : "5VqYaQDMWRzR5bOCKBvLF8",
+  "2011" : "4HPdL5jwsxKnh7RTAwq9hF",
+  "2012" : "5tjy5qbWxaFFFTseRDptC7",
+  "2013" : "2YPpTFZPn6s1y7q8PFRLv7",
+  "2014" : "3svTn0yv1hfv8vzMzVd31D",
+  "2015" : "1HtXxHLxLvC5ePfd0hQC7U",
+  "2016" : "0VEtwmjx3FK77jWLlI16EV",
+  "2017" : "6Ey20ccpxRCd0AlaIuGJrB",
+  "2018" : "5sxwk5T34E2l2Ng02lipHS",
+  "2019" : "3ZdQUt8Tmtt7oOU8UM2koe"
+}
+#+END_SRC
+
+#+RESULTS:
+
+*** get_genre_data()
+#+BEGIN_SRC python
+def get_genre_data(dates):
+  token = oauth2.SpotifyClientCredentials(
+      client_id = "2cb187373b41486e92ac0fb58daa3473",
+      client_secret="b8687a7e4c8141d38c3272c55d255e7d"
+  )
+  cache_token = token.get_access_token()
+  spotify = spotipy.Spotify(cache_token)
+  USER = "coppercity17"
+  client = spotipy.client.Spotify(auth=cache_token)
+  genre_dict = dict()
+  no_genre_dict = dict()
+  genres_per_track_dict = dict()
+  genre_count_per_track = dict()
+  popularity_per_track_dict = dict()
+  for date in dates:
+    print("date:",date)
+    no_genre_count = 0
+    genres_per_track_dict[date] = dict()
+    genre_count_per_track[date] = dict()
+    popularity_per_track_dict[date] = dict()
+    results = spotify.user_playlist_tracks(USER, playlist_id_dict[date], limit=100, offset=0)
+    eurovision_genres = list()
+    for i, track in enumerate(results['items']):
+      artist = client.artist(track['track']['artists'][0]['id'])
+      #print("track[\"track\"].keys():",track["track"].keys())
+      genres_per_track_dict[date][track["track"]["name"]] = artist["genres"]
+      genre_count_per_track[date][track["track"]["name"]] = len(artist["genres"])
+      popularity_per_track_dict[date][track["track"]["name"]] = track["track"]["popularity"]
+      #songs.append(track['track']['artists'][0]['id'])
+      if(len(artist['genres']) == 0):
+        #print("no genres")
+        no_genre_count += 1
+      for genre in artist['genres']:
+        eurovision_genres.append(genre)
+    genre_dict[date] = eurovision_genres
+    no_genre_dict[date] = no_genre_count
+  return genre_dict, no_genre_dict, genres_per_track_dict, genre_count_per_track, popularity_per_track_dict
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python
+genre_dict,no_genre_dict, genres_per_track_dict, genre_count_per_track, popularity_per_track_dict = get_genre_data(
+  [str(2010 + i) for i in range(10)]
+)
+#+END_SRC
+
+#+RESULTS:
+: Index(['year', 'country', 'track', 'genre_count', 'popularity', 'genres',
+:        'has_eurovision', 'has_only_eurovision', 'year_country'],
+:       dtype='object')
+
+#+BEGIN_SRC python
+genre_dict,no_genre_dict, genres_per_track_dict, genre_count_per_track, popularity_per_track_dict = get_genre_data(
+  [str(2000 + i) for i in range(20)]
+)
+#+END_SRC
+
+#+RESULTS:
+
+*** track_country_dict
+***** initialising dictionary
+#+BEGIN_SRC python
+track_country_dict = dict()
+for i in range(20):
+  track_country_dict[str(2000+i)] = dict
+#+END_SRC
+
+#+RESULTS:
+
+***** data for 2000
+#+BEGIN_SRC python
+track_country_dict["2000"] = {
+  "Fly on the Wings of Love"                                    : "Denmark",
+  "Smuk som et stjerneskud"                                     : "Denmark",
+  "Solo"                                                        : "Russia",
+  "My Star"                                                     : "Latvia", 
+  "Wadde hadde dudde da - Radio Version"                        : "Germany",
+  "Tell Me (Eurovision Iceland 2000) Orginal Version"           : "Iceland",
+  "When Spirits Are Calling My Name"                            : "Sweden", 
+  "No Goodbyes - Radio Edit"                                    : "Netherlands",
+  "Colgado De Un Sueño"                                         : "Spain",
+  "Desire - ESC 2000"                                           : "Malta",
+  "Millennium of Love"                                          : "Ireland",
+  "My Heart Goes Boom"                                          : "Norway",
+  "Wadde Hadde Dudde Da?"                                       : "Germany",
+  "Don't Play That Song Again (New Vocal Remix)"                : "United Kingdom",
+  "Kada zaspu andeli (Ostatni) Pokochaj mnie"                   : "Croatia",
+  "Yorgunum Anla"                                               : "Turkey",
+  "Don't Play That Song Again - New Vocal Remix"                : "United Kingdom",
+  "Kada Zaspu Anđeli (Ostani)"                                  : "Croatia", 
+}                                                      
+#+END_SRC                                              
+                                                       
+#+RESULTS:                                             
+                                                       
+***** data for 2001
+#+BEGIN_SRC python
+track_country_dict["2001"] = {
+  "Never Ever Let You Go"                                      : "Denmark",
+  "(I Would) Die for You"                                      : "Greece",
+  "Je n'ai que mon âme"                                        : "France",
+  "Listen to your heartbeat"                                   : "Sweden", 
+  "No Dream Impossible"                                        : "United Kingdom",
+  "Ne, ni res - Zmagovalna skladba EMA 2001"                   : "Slovenia", 
+  "Another Summer Night - Radio Edit"                          : "Malta",
+  "Dile Que la Quiero"                                         : "Spain",
+  "Wer Liebe lebt - Grand Prix Version"                        : "Germany",
+  "Strings Of My Heart"                                        : "Croatia",
+  "Too Much - Original"                                        : "Latvia",
+  "Angel (eurovision edit)"                                    : "Iceland",
+  "Hano"                                                       : "Bosnia & Herzegovina",
+  "Só Sei Ser Feliz Assim"                                     : "Portugal",
+  "On My Own"                                                  : "Norway",
+  "You Got Style"                                              : "Lithuania",
+}                                                      
+#+END_SRC                                              
+                                                       
+#+RESULTS:                                             
+                                                       
+***** data for 2002
+#+BEGIN_SRC python
+track_country_dict["2002"] = {
+  "I Wanna (Radio Version)"                                     : "Latvia",
+  "7th Wonder"                                                  : "Malta",
+  "Come Back - Single Edit"                                     : "United Kingdom",
+  "Runaway - Bonus Track"                                       : "Estonia", 
+  "Il Faut Du Temps"                                            : "France",
+  "Gimme"                                                       : "Cyprus", 
+  "Europe's Living A Celebration (Eurovision)"                  : "Spain",
+  "Never Let It Go"                                             : "Sweden",
+  "Northern Girl"                                               : "Russia",
+  "Everything I Want"                                           : "Croatia",
+  "נדליק ביחד נר"                                                 : "Israel",
+  "Samo Ljubezen"                                               : "Slovenia",
+  "Say A Word - Radio Mix"                                      : "Austria",
+  "Addicted to You"                                             : "Finland",
+  "I Can't Live Without Music - Grand Prix-Version"             : "Germany",
+  "Dans le jardin de mon âme"                                   : "Switzerland",
+}                                                      
+#+END_SRC                                              
+                                                       
+#+RESULTS:                                             
+                                                       
+***** data for 2003
+#+BEGIN_SRC python
+track_country_dict["2003"] = {
+  "Every Way That I Can - Philippe Laurent from Galleon Radio Edit" : "Turkey",
+  "Every Way That I Can"                                         : "Turkey",
+  "Ne Ver, Ne Boisia - Eurovision 2003 Version"                  : "Russia",
+  "Sanomi"                                                       : "Belgium", 
+  "We've Got the World"                                          : "Ireland",
+  "Keine Grenzen / Zadnych Granic"                               : "Poland", 
+  "Cry Baby"                                                     : "United Kingdom",
+  "Don't Break My Heart"                                         : "Romania",
+  "Hello From Mars"                                              : "Latvia",
+  "Open your heart"                                              : "Iceland",
+  "Deixa-me sonhar (so mais uma vez)"                            : "Portugal",
+  "Vise Nisam Tvoja - Dora 2003"                                 : "Croatia",
+  "Dime"                                                         : "Spain",
+  "Dziesma par laimi"                                            : "Latvia", # 2004
+  "Jugarem A Estimar-Nos"                                        : "Spain", # 2004
+  "Let's Get Happy (Karaoke Version) - Originally Performed By Lou" : "Germany",
+  "Weil der Mensch zählt"                                        : "Austria", 
+  "Feeling Alive - Eurovision Version"                           : "Cyprus",
+  "Milim La'ahava"                                               : "Israel",
+  "Never Let You Go - Euro"                                      : "Greece",
+  "Give Me Your Love"                                            : "Sweden",
+  "Više nisam tvoja"                                             : "Croatia",
+  "Nanana"                                                       : "Slovenia",
+}                                                      
+#+END_SRC                                              
+                                                       
+#+RESULTS:                                             
+                                                       
+***** data for 2004
+#+BEGIN_SRC python
+track_country_dict["2004"] = {
+  "Wild Dances"                                                  : "Ukraine",
+  "Lane Moje"                                                    : "Serbia & Montenegro",
+  "For Real"                                                     : "Turkey",
+  "Shake It - Eurovision Version"                                : "Greece", 
+  "It Hurts"                                                     : "Sweden",
+  "Det gör ont"                                                  : "Sweden", 
+  "Can't Wait Until Tonight"                                     : "Germany",
+  "On Again ... Off Again - ESC 2004"                            : "Malta",
+  "If My World Stopped Turning"                                  : "Ireland",
+  "Believe me"                                                   : "Russia",
+  "Love Song"                                                    : "Poland",
+  "A Chaque Pas"                                                 : "France",
+  "Heaven, Iceland Eurovision 2004"                              : "Iceland",
+  "In The Disco"                                                 : "Bosnia & Herzegovina",
+  "Hold On To Our Love"                                          : "United Kingdom",
+  "Para Llenarme De Tí"                                          : "Spain",
+  "Life"                                                         : "North Macedonia", # Macedonia
+  "High - MGP-version"                                           : "Norway",
+  "You are the only one"                                         : "Croatia",
+  "Jugarem A Estimar-Nos"                                        : "Andorra",
+  "Dua të jem imazhi yt"                                         : "Albania",
+  "Takes 2 to Tango"                                             : "Finland",
+  "Good Bye"                                                     : "Serbia & Montenegro",
+  "להאמין"                                                       : "Israel",
+  "Du bist"                                                      : "Austria",
+  "Can't Wait Until Tonight (Radio Version)"                     : "Germany",
+  "Hold On to Our Love"                                          : "United Kingdom",
+  "İst. - Turkish version"                                       : "Greece",
+}                                                      
+#+END_SRC                                              
+                                                       
+#+RESULTS:                                             
+                                                       
+***** data for 2005
+#+BEGIN_SRC python
+track_country_dict["2005"] = {
+  "My Number One"                                                : "Greece",
+  "Israel 2005: The Quiet That Remains / HaSheket She'nishar"    : "Israel",
+  "The War Is Not Over - Radio"                                  : "Latvia",
+  "Cool Vibes"                                                   : "Switzerland", 
+  "In My Dreams"                                                 : "Norway",
+  "Tænder På Dig"                                                : "Denmark", 
+  "Vukovi Umiru Sami"                                            : "Croatia",
+  "Forogj Világ!"                                                : "Hungary",
+  "If I Had Your Love"                                           : "Iceland",
+  "Nobody Hurt No One"                                           : "Greece",
+  "Ela Ela (Come Baby) - Eurovision Version"                     : "Cyprus",
+  "Lets Get Loud"                                                : "Estonia",
+  "Boonika Bate Doba (Grandmana Beat The Drum-A)"                : "Moldova",
+  "Stop"                                                         : "Slovenia",
+  "Touch My Fire"                                                : "United Kingdom",
+  "Run & Hide (Radio Edit)"                                      : "Germany",
+  "My Impossible Dream"                                          : "Netherlands", 
+  "Sense Tu Remix (Nacho Chapado Remix) Cançó Eurovisió Andorra 06" : "Andorra", # 2006
+  "Brujeria"                                                     : "Spain",
+  "Le Grand soir"                                                : "Belgium",
+  "Why"                                                          : "Finland", 
+  "Lorraine - Eurovision Song Contest"                           : "Bulgaria",
+  "Rimi Rimi Ley ( eastman&avitas Euro Delight Edit )"           : "Turkey",
+  "Razom Nas Bagato"                                             : "Ukraine",
+  "Y'Así"                                                        : "Moldova",
+  "Boonika Bate Doba"                                            : "Latvia",
+  "The War Is Not Over"                                          : "Latvia",
+  "השקט שנשאר"                                                  : "Israel",
+  "STOP (ESC version)"                                           : "Slovenia",
+  "Call Me"                                                      : "Bosnia & Herzegovina",
+  "Nesër Shkoj"                                                  : "Albania",
+  "Love (Remix)"                                                 : "Ireland",
+}                                                      
+#+END_SRC                                              
+                                                       
+#+RESULTS:                                             
+                                                       
+***** data for 2006
+#+BEGIN_SRC python
+track_country_dict["2006"] = {
+  "Hard Rock Hallelujah"                                         : "Finland",
+  "Hard Rock Hallelujah - Eurovicious Radio Edit"                : "Finland",
+  "Never Let You Go"                                             : "Russia",
+  "Lejla"                                                        : "Bosnia & Herzegovina", 
+  "Tornero"                                                      : "Romania",
+  "Invincible"                                                   : "Sweden", 
+  "Everything"                                                   : "Greece",
+  "Superstar - Turkish Version"                                  : "Turkey",
+  "Superstar - English Version"                                  : "Turkey",
+  "No No Never"                                                  : "Germany",
+  "Alvedansen"                                                   : "Norway",
+  "Show Me Your Love"                                            : "Ukraine",
+  "Moja Štikla"                                                  : "Croatia",
+  "We Are The Winners - Original Version"                        : "Sweden",
+  "Je t'adore - Eurovision Mix"                                  : "Belgium",
+  "Congratulations"                                              : "Iceland",
+  "Every Song Is a Cry for Love"                                 : "Ireland", 
+  "Twist Of Love"                                                : "Denmark",
+  "Un Blodymary"                                                 : "Spain",
+  "Ninanajna"                                                    : "North Macedonia", # Macedonia
+  "Sense Tu"                                                     : "Andorra",
+  "Il était Temps"                                               : "France",
+  "Let Me Cry"                                                   : "Bulgaria",
+  "Through My Window"                                            : "Estonia",
+  "If We All Give A Little - Eurovision Song Contest Switzerland 2006"   : "Switzerland",
+  "Loca"                                                         : "Moldova",
+  "MR. NOBODY"                                                   : "Slovenia",
+  "Amambanda - Single Edit"                                      : "Netherlands",
+  "I Do - Eurovision Mix"                                        : "Malta",
+  "Zjarr E Ftohtë"                                               : "Albania",
+  "Why Angels Cry"                                               : "Cyprus",
+}                                                      
+#+END_SRC                                              
+                                                       
+#+RESULTS:                                             
+                                                       
+***** data for 2007
+#+BEGIN_SRC python
+track_country_dict["2007"] = {
+  "Molitva - Serbian Version"                                    : "Serbia",
+  "Molitva - rmx"                                                : "Serbia",
+  "Dancing Lasha Tumbai"                                         : "Ukraine",
+  "Song #1"                                                      : "Russia", 
+  "Song #1 (Русская версия)"                                     : "Russia",
+  "Shake It Up - Original Version"                               : "Turkey", 
+  "Yassou Maria"                                                 : "Greece",
+  "Yassou Maria (Greeklish Version)"                             : "Greece",
+  "Come Ci Comme Ca"                                             : "Cyprus",
+  "Frauen regier'n die Welt"                                     : "Germany",
+  "I love you mi vida"                                           : "Spain",
+  "The Worrying Kind"                                            : "Sweden",
+  "L'Amour à la française"                                       : "France",
+  "Vampires Are Alive"                                           : "Switzerland",
+  "Flying the Flag (For You) - Eurovision 2007 UK Version"       : "United Kingdom",
+  "Aprócska Blues"                                               : "Hungary",
+  "Leave Me Alone - Eurovision Edit"                             : "Finland", 
+  "Cvet Z Juga"                                                  : "Slovenia",
+  "Nooit meer zonder jou"                                        : "Netherlands",
+  "Valentine Lost (Iceland)"                                     : "Iceland",
+  "Time To Party (Poland)"                                       : "Poland",
+  "Вода - Kliment Remix"                                         : "Bulgaria",
+  "Love or Leave"                                                : "Lithuania",
+  "Vertigo - ESC 2007"                                           : "Malta",
+  "Balada e gurit"                                               : "Albania",
+  "Mala dama"                                                    : "Czech Republic",
+  "Partners in Crime"                                            : "Estonia",
+  "Vjerujem U Ljubav"                                            : "Croatia",
+  "Drama Queen"                                                  : "Denmark",
+  "Push The Button"                                              : "Israel",
+  "Dança Comigo - Vem Ser Feliz"                                 : "Portugal",
+  "Salvem el Món - Eurovision Song Contest Helsinki 2007"        : "Andorra",
+  "Lovepower"                                                    : "Belgium",
+  "Questa Notte"                                                 : "Latvia",
+  "Anytime You Need"                                             : "Armenia",
+  "Ven a Bailar Conmigo"                                         : "Norway",
+  "Get a Life - Get Alive (Karaoke Version) - Originally Performed By Eric Papilaya" :  "Austria",
+}                                                      
+#+END_SRC                                              
+                                                       
+#+RESULTS:                                             
+
+***** data for 2008
+#+BEGIN_SRC python
+track_country_dict["2008"] = {
+  "Believe ( Ver' )"                                             : "Russia",
+  "Shady Lady"                                                   : "Ukraine",
+  "Secret Combination"                                           : "Greece",
+  "Hold On Be Strong"                                            : "Norway", 
+  "Qélé Qélé (Eurovision 2008 Armenia)"                          : "Armenia",
+  "Qele-qele (remix)"                                            : "Armenia",
+  "Hero"                                                         : "Sweden", 
+  "This Is My Life"                                              : "Iceland",
+  "Divine"                                                       : "France",
+  "All Night Long"                                               : "Denmark",
+  "Baila el Chiki Chiki"                                         : "Spain",
+  #"(The fire in your eyes) כאילו כא"                              : "Israel",
+  "(The fire in your eyes) כאילו כאן"                             : "Israel",
+  "Pokusaj - Bosnia & Herzegovina"                               : "Bosnia & Herzegovina",
+  "Deli - Eurovision 08"                                         : "Turkey",
+  "Disappear"                                                    : "Germany",
+  "Vodka - ESC 2008"                                             : "Malta",
+  "DJ, Take Me Away (Original Radio Mix)"                        : "Bulgaria",
+  "Hasta La Vista"                                               : "Belarus", 
+  "Complice"                                                     : "San Marino",
+  "Era stupendo - Live"                                          : "Switzerland",
+  "Have Some Fun"                                                : "Czech Republic",
+  "Zemrën E Lamë Peng"                                           : "Albania",
+  "O Julissi Na Jalini"                                          : "Belgium",
+  "Irlande Douze Points"                                         : "Ireland",
+  "Pokusaj (Eurovision Song Contest 2008)"                       : "Bosnia & Herzegovina",
+  "Missä miehet ratsastaa - Euroviisuversio"                     : "Finland",
+  "Pe-O Margine De Lume"                                         : "Romania",
+  "Candlelight"                                                  : "Hungary",
+  "Senhora Do Mar (Negras Águas)"                                : "Portugal",
+  "Even If"                                                      : "United Kingdom",
+  "Oro"                                                          : "Serbia",
+  "Vrag naj vzame - Mesto ema 2008"                              : "Slovenia",
+  "Вода - Kliment Remix"                                         : "Bulgaria", # 2007
+  "Oro - (Eurovision 2008)"                                      : "Serbia",
+}                                                      
+#+END_SRC                                              
+                                                       
+#+RESULTS:                                             
+                                                       
+***** data for 2009
+#+BEGIN_SRC python
+track_country_dict["2009"] = {
+  "Fairytale"                                                    : "Norway",
+  "Is It True?"                                                  : "Iceland",
+  "Always - Single Version"                                      : "Azerbaijan",
+  "Dum Tek Tek"                                                  : "Turkey",
+  "It's My Time - Radio Edit"                                    : "United Kingdom", 
+  "Rändajad"                                                     : "Estonia",
+  "This Is Our Night"                                            : "Greece", 
+  "Et S'il Fallait Le Faire - Version edit Eurovision"           : "France",
+  "Todas as Ruas do Amor"                                        : "Portugal",
+  "Bistra voda"                                                  : "Bosnia & Herzegovina",
+  "Believe Again"                                                : "Denmark",
+  "Be My Valentine! (Anti-crisis Girl)"                          : "Ukraine",
+  "Miss Kiss Kiss Bang - Radio Version"                          : "Germany",
+  "What If We - ESC 2009"                                        : "Malta",
+  "The Highest Heights"                                          : "Switzerland",
+  "Мамо"                                                         : "Russia",
+  "Jan-jan"                                                      : "Armenia",
+  "La Voix"                                                      : "Sweden", 
+  "La Noche Es Para Mí"                                          : "Spain",
+  "Më Merr Në Ëndërr"                                            : "Albania",
+  "The Balkan Girls"                                             : "Romania",
+  "Lose Control - Radio Edit"                                    : "Lose Control",
+  "Firefly - Eurovision 2009_CYPRUS ENTRY"                       : "Cyprus",
+  "There Must Be Another Way"                                    : "Israel",
+  "Hora Din Moldova"                                             : "Moldova",
+  "Lijepa Tena"                                                  : "Croatia",
+  "Just Get out of My Life - ESC-Version"                        : "Montenegro",
+  "Dance with me"                                                : "Hungary",
+  "Et Cetera"                                                    : "Ireland",
+  "I Don't Wanna Leave"                                          : "Poland",
+  "Illusion - Eurovision Remix"                                  : "Bulgaria",
+  "La Teva Decisió / Get a Life - Main Mix"                      : "Andorra",
+  "Shine"                                                        : "Netherlands",
+  "Cipela"                                                       : "Serbia",
+  "Aven Romale"                                                  : "Czech Republic",
+  "Copycat"                                                      : "Belgium",
+  "Be My Valentine"                                              : "Ukraine",
+  "Love"                                                         : "Lithuania",
+  "Love Symphony"                                                : "Slovenia",
+}                                                      
+#+END_SRC                                              
+                                                       
+#+RESULTS:                                             
+                                                       
+***** data for 2010
+#+BEGIN_SRC python
+track_country_dict["2010"] = {
+  "Satellite"                                                    : "Germany",
+  "We Could Be The Same - Turkey"                                : "Turkey",
+  "We Could Be the Same"                                         : "Turkey",
+  "Playing With Fire"                                            : "Romania", 
+  "In A Moment Like This"                                        : "Denmark",
+  "Drip Drop"                                                    : "Azerbaijan", 
+  "Me And My Guitar"                                             : "Belgium",
+  "Apricot Stone - Armenia"                                      : "Armenia",
+  "Opa"                                                          : "Greece",
+  "Shine"                                                        : "Georgia",
+  "Sweet People"                                                 : "Ukraine",
+  "Lost And Forgotten - Russia"                                  : "Russia",
+  "Allez Ola Olé"                                                : "France",
+  "Ovo je Balkan (This Is The Balkans) - Serbia"                 : "Serbia", # Serbia
+  "Milim"                                                        : "Israel",
+  "Algo pequeñito"                                               : "Spain",
+  "It's All About You - Albania"                                 : "Albania", 
+  "Nuk Mundem Pa Ty"                                             : "Albania",
+  "Thunder And Lightning - Bosnia & Herzegovina"                 : "Bosnia & Herzegovina",
+  "Há Dias Assim - Portugal"                                     : "Portugal",
+  "Je Ne Sais Quoi (Eurovision 2010) Orginal Version"            : "Iceland",
+  "My Heart Is Yours"                                            : "Norway",
+  "Life Looks Better In Spring"                                  : "Cyprus",
+  "Run Away - Radio Edit"                                        : "Moldova",
+  "It's For You"                                                 : "Ireland",
+  "Butterflies - Belarus"                                        : "Belarus",
+  "That Sounds Good To Me - United Kingdom"                      : "United Kingdom",
+  "This Is My Life"                                              : "Sweden",
+  "Työlki ellää - Remix"                                         : "Finland",
+  "My Dream - ESC 2010"                                          : "Malta",
+  "Eastern European Funk"                                        : "Lithuania",
+  "Legenda - Poland"                                             : "Poland",
+  "Lako Je Sve"                                                  : "Croatia",
+  "Siren"                                                        : "Estonia",
+  "Ik Ben Verliefd (sha - La - Lie)"                             : "Netherlands",
+  "Jas Ja Imam Silata - FYR Macedonia"                           : "North Macedonia",    # Macedonia
+  "Angel Si Ti (You Are An Angel) - Bulgaria"                    : "Bulgaria",
+  "Horehronie"                                                   : "Slovakia",
+  "Narodnozabavni Rock - Slovakia"                               : "Slovenia",
+  "What For? - Radio Edit"                                       : "Latvia",
+  "Il pleut de l'or - Switzerland"                               : "Switzerland",
+}                                                      
+#+END_SRC                                              
+                                                       
+#+RESULTS:                                             
+                                                       
+***** data for 2011
+#+BEGIN_SRC python
+track_country_dict["2011"] = {
+  "Running Scared"                                               : "Azerbaijan",
+  "Madness Of Love"                                              : "Itally",
+  "Popular"                                                      : "Sweden",
+  "Ангел"                                                        : "Angel", 
+  "New Tomorrow"                                                 : "Denmark",
+  "Love In Rewind"                                               : "Bosnia & Herzegovina", 
+  "One More Day"                                                 : "Georgia",
+  "Lipstick - Radio Edit"                                        : "Ireland",
+  "Taken By A Stranger - Single Version"                         : "Germany",
+  "I Can - Radio Edit"                                           : "United Kingdom",
+  "Get You"                                                      : "Russia",
+  "Da Da Dam"                                                    : "Finland",
+  "Sognu"                                                        : "France",
+  "What about my dreams? - Eurovision Edit (Hunglish)"           : "Hungary",
+  "Rockefeller Street"                                           : "Estonia",
+  "No One"                                                       : "Slovenia",
+  "In Love For A While - Radio Version"                          : "Switzerland", 
+  "Haba Haba - Eurovision 2011 - Norway"                         : "Norway",
+  "Jestem - Bonus Track"                                         : "Poland",
+  "The Secret is Love"                                           : "Austria",
+  "Que me quiten lo bailao"                                      : "Spain",
+  "Watch My Dance"                                               : "Greece",
+  "So Lucky"                                                     : "Moldova",
+  "Coming Home (Iceland´s Official Esc Entry 2011)"              : "Iceland",
+  "Kënga Ime"                                                    : "Albania",
+  "One Life - Main Pass"                                         : "Malta",
+  "Never Alone"                                                  : "Netherlands",
+  "Stand By - English Version"                                   : "Senit",
+  "With Love Baby"                                               : "Belgium",
+  "I´m Still Alive - Radio Edit"                                 : "Slovakia",
+  "Celebrate"                                                    : "Croatia",
+  "Running scared (feat. Ell)"                                   : "Azerbaijan",
+  "Angel In Disguise"                                            : "Latvia",
+  "C'est Ma Vie"                                                 : "Lithuania",
+  "Ding Dong (Eurovision 2011 - Israel)"                         : "Israel",
+}
+#+END_SRC
+
+#+RESULTS:
+
+***** data for 2012
+#+BEGIN_SRC python
+track_country_dict["2012"] = {
+  "Euphoria"                                                     : "Sweden",
+  "Euphoria - Single Version"                                    : "Sweden",
+  "Party for Everybody (Original Radio Edit)"                    : "Russia",
+  "Nije Ljubav Stvar - Su Amor Me Vencio"                        : "Serbia & Montenegro", 
+  "When the music dies"                                          : "Azerbaijan",
+  "Love Me Back"                                                 : "Turkey", 
+  "Standing Still"                                               : "Germany",
+  "Suus"                                                         : "Albania",
+  "Crno I Belo - Eurovision 2012 - F.Y.R. Macedonia"             : "North Macedonia", # Macedonia
+  "L'Amore E' Femmina (Out Of Love) - English Version"           : "Italy",
+  "La La Love"                                                   : "Cyrpus",
+  "Zaleilah - Eurovision Version"                                : "Romania",
+  "Quédate conmigo - Versión Baku"                               : "Spain",
+  "Kuula"                                                        : "Estonia",
+  "Never Forget"                                                 : "Iceland",
+  "Lautar"                                                       : "Moldova",
+  "Echo (You and I)"                                             : "France",
+  "Waterline"                                                    : "Ireland", 
+  "Love Will Set You Free"                                       : "United Kingdom",
+  "Stay"                                                         : "Norway",
+  "Should´ve Known Better"                                       : "Denmark",
+  "Time"                                                         : "Israel",
+  "This Is The Night - Eurovision 2012 - Malta"                  : "Malta",
+  "We Are the Heroes"                                            : "Belarus",
+  "Aphrodisiac"                                                  : "Greece",
+  "Unbreakable"                                                  : "Switzerland",
+  "Love unlimited"                                               : "Bulgaria",
+  "Korake Ti Znam - Eurosong 2012"                               : "Bosnia & Herzegovina",
+  "Sound of Our Hearts"                                          : "Hungary",
+  "Woki mit deim Popo"                                           : "Austria",
+  "You and Me"                                                   : "Netherlands",
+  "Vida Minha - Radio Edit"                                      : "Portugal",
+  "Nebo"                                                         : "Croatia",
+  "Love Is Blind"                                                : "Lithuania",
+  "Verjamem"                                                     : "Verjamem",
+  "The Social Network Song (oh oh\x96uh\x96oh oh)"               : "San Marino",
+}
+#+END_SRC
+
+#+RESULTS:
+
+***** data for 2013
+#+BEGIN_SRC python
+track_country_dict["2013"] = {
+  "Only Teardrops"                                               : "Denmark",
+  "Hold me - Full Version"                                       : "Azerbaijan",
+  "Gravity"                                                      : "Ukraine",
+  "I Feed You My Love"                                           : "Norway", 
+  "What If"                                                      : "Russia",
+  "L'essenziale"                                                 : "Italy", 
+  "Birds"                                                        : "Netherlands",
+  "Kedvesem - Zoohacker Remix"                                   : "Hungary",
+  "You"                                                          : "Sweden",
+  "It's My Life"                                                 : "Romania",
+  "Tomorrow"                                                     : "Malta",
+  "O Mie"                                                        : "Moldova",
+  "Love Kills"                                                   : "Belgium",
+  "Glorious - Video Edit"                                        : "Germany",
+  "Only Love Survives"                                           : "Ireland",
+  "Eg a Lif (Icelandic Esc Entry 2013)"                          : "Iceland",
+  "L'enfer et moi"                                               : "France", 
+  "Contigo hasta el final"                                       : "Spain",
+  "Identitet"                                                    : "Albania",
+  "Alcohol Is Free - Radio Edit"                                 : "Greece",
+  "Marry Me"                                                     : "Finland",
+  "Само Шампиони"                                                : "Bulgaria",
+  "Mižerja - Eurovision 2013 - Croatia"                          : "Croatia",
+  "Pred da Se Razdeni (feat. Esma Redzepova)"                    : "Macedonia",
+  "Something"                                                    : "Lithuania",
+  "Shine"                                                        : "Austria",
+  "Et Uus Saaks Alguse"                                          : "Estonia",
+  "Rak Bishvilo"                                                 : "Israel",
+  "Solayoh"                                                      : "Belarus",
+  "An Me Thimasai"                                               : "Cyprus",
+  "You And Me"                                                   : "Switzerland",
+  "Here We Go"                                                   : "Latvia",
+  "Crisalide (Vola) - Original-ESC-Version"                      : "San Marino",
+  "We Write The Story - Edited Version"                          : "Bonus",
+  "Believe In Me - Eurovision 2013 - United Kingdom"             : "United Kingdom",
+  "Straight Into Love - Eurovision 2013 - Slovenia"              : "Slovenia",
+  "Pred Da Se Razdeni - Eurovision 2013 - F.Y.R. Macedonia"      : "North Macedonia", #North Macdeonia
+  "Igranka - Eurovision 2013 - Montenegro"                       : "Montenegro",
+  "Waterfall - Eurovision 2013 - Georgia"                        : "Georgia",
+  "Samo Shampioni (Only Champions) - Eurovision 2013 - Bulgaria" : "Bulgaria",
+  "Lonely Planet - Eurovision 2013 - Armenia"                    : "Armenia",
+  "Ljubav Je Svuda - Eurovision 2013 - Serbia"                   : "Serbia",
+}
+#+END_SRC
+
+#+RESULTS:
+
+***** data for 2014
+#+BEGIN_SRC python
+track_country_dict["2014"] = {
+  "Rise Like A Phoenix"                                          : "Austria",
+  "Calm After The Storm - Radio Edit"                            : "Netherlands",
+  "Not Alone"                                                    : "Armenia",
+  "Undo"                                                         : "Sweden", 
+  "Running"                                                      : "Hungary",
+  "Tick Tock"                                                    : "Ukraine", 
+  "Silent Storm"                                                 : "Norway",
+  "Dancing in the Rain - Official Eurovision 2014 - Spain"       : "Spain",
+  "Miracle (Eurovision Song Contest 2014)"                       : "Romania",
+  "Cliche Love Song - Radio Edit"                                : "Denmark",
+  "Hunter of Stars"                                              : "Switzerland",
+  "Slavic Girls"                                                 : "Poland",
+  "My Słowianie"                                                 : "Poland",
+  "Coming Home"                                                  : "Malta",
+  "La Mia Città"                                                 : "Italy",
+  "Children of the Universe"                                     : "United Kingdom",
+  "Moj Svijet"                                                   : "Montenegro", 
+  "Rise Up - Eurovision Version"                                 : "Greece",
+  "Start A Fire - Full Eurovision Version"                       : "Azerbaijan",
+  "Round and Round - Official ESC"                               : "Slovenia",
+  "Quero Ser Tua"                                                : "Portugal",
+  "No Predjudice"                                                : "Iceland",
+  "Mother"                                                       : "Belgium",
+  "Cheesecake"                                                   : "Belarus",
+  "Amazing"                                                      : "Estonia",
+  "Heartbeat (feat. Kasey Smith)"                                : "Ireland",
+  "Cake to Bake"                                                 : "Latvia",
+  "Is It Right"                                                  : "Germany",
+  "Moj svijet"                                                   : "Montenegro",
+  "To the sky ( Where do we go now )"                            : "North Macedonia", # Macedonia
+  "Moustache"                                                    : "France",
+  "Something Better"                                             : "Finland",
+  "Maybe - Esc Version"                                          : "San Marino",
+  "Rainmaker - Official #JoinUs Song - Bonus Track"              : "Bonus",
+  "Sea of Flags"                                                 : "Interval",
+  "Rise Like a Phoenix"                                          : "Austria",
+  "Three Minutes To Earth - Eurovision 2014 - Georgia"           : "Georgia",
+  "Same Heart - Eurovision 2014 - Israel"                        : "Israel",
+  "One Night's Anger - Eurovision 2014 - Albania"                : "Albania",
+  "Wild Soul - Eurovision 2014 - Moldova"                        : "Moldova",
+}
+#+END_SRC
+
+#+RESULTS:
+
+***** data for 2015
+#+BEGIN_SRC python
+track_country_dict["2015"] = {
+  "Heroes"                                                       : "Sweden",
+  "A Million Voices"                                             : "Russia",
+  "Grande amore"                                                 : "Italy",
+  "Rhythm Inside"                                                : "Belgium", 
+  "Tonight Again"                                                : "Australia",
+  "Love Injected"                                                : "Latvia", 
+  "Goodbye To Yesterday"                                         : "Estonia",
+  "A Monster Like Me (Feat. The Oslo Philharmonic Choir)"        : "Norway",
+  "Golden Boy"                                                   : "Israel",
+  "Here for You - Radio Edit"                                    : "Slovenia",
+  "Hour Of The Wolf - Eurovision 2015 - Azerbaijan"              : "Azerbaijan",
+  "Ne jete"                                                      : "Albania",
+  "De La Capat - Eurovision Version"                             : "Romania",
+  "One Thing I Should Have Done - Eurovision 2015 - Cyprus"      : "Cyprus",
+  "One Last Breath - Eurovision Version"                         : "Greece",
+  "In the Name of Love"                                          : "Poland",
+  "Amanecer"                                                     : "Spain", 
+  "Wars For Nothing - Eurovision 2015 - Hungary"                 : "Hungary",
+  "Warrior - Eurovision 2015 - Georgia"                          : "Georgia",
+  "Still in Love with You"                                       : "United Kingdom",
+  "N'oubliez pas"                                                : "France",
+  "I Am Yours"                                                   : "Austria",
+  "Black Smoke"                                                  : "Germany",
+  "This Time"                                                    : "Lithuania",
+  "Autumn Leaves - Eurovision 2015 - F.Y.R. Macedonia"           : "North Macedonia", # Macedonia
+  "Time - Eurovision Song Contest 2015"                          : "Belarus",
+  "Time to Shine"                                                : "Switzerland",
+  "Playing With Numbers"                                         : "Ireland",
+  "Unbroken"                                                     : "Iceland",
+  "The Way You Are"                                              : "Denmark",
+  "I Want Your Love"                                             : "Moldova",
+  "Walk Along"                                                   : "Netherlands",
+  "A Monster Like Me"                                            : "Norway",
+  "Warrior"                                                      : "Georgia",
+  "Aina mun pitää"                                               : "Finland",
+  "Миллион голосов"                                              : "Russia",
+  "Grande amore - Eurovision Version"                            : "Italy",
+  "Adio"                                                         : "Montenegro",
+  "Chain of Lights - ESC Version"                                : "San Marino",
+  "Love Injected - Eurovision 2015 - Latvia"                     : "Latvia",
+  "Beauty Never Lies - Eurovision 2015 - Serbia"                 : "Serbia",
+  "I'm Alive - Eurovision 2015 - Albania"                        : "Albania",
+  "Adio - Eurovision 2015 - Montenegro"                          : "Montenegro",
+  "Hope Never Dies - Eurovision 2015 - Czech Republic"           : "Czech Republic",
+  "Face The Shadow - Eurovision 2015 / Armenia"                  : "Armenia",
+  "Warrior - Eurovision 2015 - Malta"                            : "Malta",
+  "Há Um Mar Que Nos Separa - Eurovision 2015 - Portugal"        : "Portugal",
+}
+#+END_SRC
+
+#+RESULTS:
+
+***** data for 2016
+#+BEGIN_SRC python
+track_country_dict["2016"] = {
+  "1944"                                                          : "Ukraine",
+  "Sound of Silence"                                              : "Australia",
+  "You are the only one"                                          : "Russia",
+  "If Love Was a Crime - Eurovision 2016 - Bulgaria"              : "Bulgaria", 
+  "If I Were Sorry"                                               : "Sweden",
+  "LoveWave - Eurovision 2016 - Armenia"                          : "Armenia", 
+  "J'ai cherché"                                                  : "France",
+  "Loin d'ici (Esc Version)"                                      : "Austria",
+  "Slow Down"                                                     : "Netherlands",
+  "What's the Pressure"                                           : "Belgium",
+  "Heartbeat"                                                     : "Latvia",
+  "I've Been Waiting for This Night"                              : "Lithuania",
+  "Miracle - Eurovision 2016"                                     : "Azerbaijan",
+  "Made of Stars"                                                 : "Israel",
+  "I Stand"                                                       : "Czech Republic",
+  "Alter Ego"                                                     : "Cyprus",
+  "Lighthouse - Eurovision 2016 - Croatia"                        : "Croatia", 
+  "Hear Them Calling"                                             : "Iceland",
+  "Say Yay!"                                                      : "Spain",
+  "No Degree of Separation - Eurovision Version"                  : "Italy",
+  "You're Not Alone"                                              : "United Kingdom",
+  "Color Of Your Life"                                            : "Poland",
+  "Ghost"                                                         : "Germany",
+  "Dona"                                                          : "North Macedonia", #Macedonia
+  "Sing It Away"                                                  : "Finland",
+  "Soldiers Of Love"                                              : "Denmark",
+  "Icebreaker"                                                    : "Norway",
+  "Play - Eurovision 2016 - Estonia"                              : "Estonia",
+  "Sunlight - Eurovision 2016 - Ireland"                          : "Ireland",
+  "Ljubav Je... - Eurovision 2016 - Bosnia & Herzegovina"         : "Bosnia & Herzegovina",
+  "The Last of Our Kind"                                          : "Switzerland",
+  "Help You Fly"                                                  : "Belarus",
+  "Falling Stars - Radio Edit"                                    : "Moldova",
+  "Blue And Red - Eurovision 2016 - Slovenia"                     : "Slovenia",
+  "Perralle"                                                      : "Albania",
+  "Walk On Water"                                                 : "Malta",
+  "Pioneer"                                                       : "Hungary",
+  "I Didn't Know - Official ESC Version: San Marino 2016"         : "San Marino",
+  "Love Love Peace Peace"                                         : "Interval",
+  "1944 (Symphonic Version)"                                      : "Ukraine",
+  "Made Of Stars - Eurovision 2016 - Israel"                      : "Israel",
+  "Goodbye (Shelter) - Eurovision 2016 - Serbia"                  : "Serbia",
+  "The Real Thing - Eurovision 2016 - Montenegro"                 : "Montenegro",
+  "Midnight Gold - Eurovision 2016 - Georgia"                     : "Georgia",
+  "Utopian Land - Eurovision 2016 - Greece"                       : "Greece",
+}
+#+END_SRC
+
+#+RESULTS:
+
+***** data for 2017
+#+BEGIN_SRC python
+track_country_dict["2017"] = {
+  "Amar pelos Dois"                                               : "Portugal",
+  "Beautiful Mess"                                                : "Bulgaria",
+  "Hey Mamma - Radio Edit"                                        : "Moldova",
+  "City Lights"                                                   : "Belgium", 
+  "I Can´t Go On"                                                 : "Sweden",
+  "Occidentali's Karma - Radio Edit"                              : "Italy", 
+  "Yodel It!"                                                     : "Romania",
+  "Don't Come Easy"                                               : "Australia",
+  "Requiem - Eurovision Version"                                  : "France",
+  "Grab the Moment"                                               : "Norway",
+  "Fly With Me"                                                   : "Armenia",
+  "This Is Love"                                                  : "Greece",
+  "I Feel Alive"                                                  : "Israel",
+  "Skeletons"                                                     : "Azerbaijan",
+  "Running On Air"                                                : "Austria",
+  "Perfect Life - ESC Version"                                    : "Germany",
+  "Do It for Your Lover - Eurovision 2017"                        : "Spain", 
+  "Dance Alone"                                                   : "North Macedonia", # Macedonia
+  "Verona"                                                        : "Estonia",
+  "Lights and Shadows"                                            : "Netherlands",
+  "In Too Deep"                                                   : "Serbia",
+  "Dying To Try"                                                  : "Ireland",
+  "Spirit of the Night - Radio Version"                           : "San Marino",
+  "Space"                                                         : "Montenegro",
+  "Apollo - Eurovision Version"                                   : "Switzerland",
+  "Flashlight"                                                    : "Poland",
+  "World"                                                         : "Albania",
+  "My Turn"                                                       : "Czech Republic",
+  "My Friend"                                                     : "Croatia",
+  "Where I Am"                                                    : "Denmark",
+  "Paper"                                                         : "Iceland",
+  "Never Give up on You"                                          : "United Kingdom",
+  "Blackbird"                                                     : "Finland",
+  "Line"                                                          : "Latvia",
+  "Rain Of Revolution"                                            : "Lithuania",
+  "Keep The Faith"                                                : "Georgia",
+  "Origo - Eurovision Version"                                    : "Hungary",
+  "Time"                                                          : "Ukraine",
+  "Breathlessly"                                                  : "Malta",
+  "Historyja Majho žyccia (Eurovision 2017)"                      : "Belarus",
+  "On My Way"                                                     : "Slovenia",
+  "Gravity"                                                       : "Cyrpus",
+}
+#+END_SRC
+
+#+RESULTS:
+
+***** data for 2018
+#+BEGIN_SRC python
+track_country_dict["2018"] = {
+  "Toy - Music Video Version"                                     : "Israel",
+  "Fuego"                                                         : "Cyprus",
+  "Nobody But You"                                                : "Austria",
+  "You Let Me Walk Alone"                                         : "Germany", 
+  "Non mi avete fatto niente - ESC Version"                       : "Italy",
+  "Lie to Me - ESC Version"                                       : "Czech Republic", 
+  "Dance You Off"                                                 : "Sweden",
+  "La Forza"                                                      : "Estonia",
+  "Higher Ground"                                                 : "Denmark",
+  "My Lucky Day"                                                  : "Moldova",
+  "Mall"                                                          : "Albania",
+  "When We're Old"                                                : "Lithuania",
+  "Mercy - Eurovision Version"                                    : "France",
+  "Bones"                                                         : "Bulgaria",
+  "That's How You Write A Song"                                   : "Norway",
+  "Together"                                                      : "Ireland",
+  "Under the Ladder"                                              : "Ukraine", 
+  "Outlaw In 'Em - Single Edit"                                   : "Netherlands",
+  "Nova Deca"                                                     : "Serbia",
+  "We Got Love"                                                   : "Australia",
+  "Viszlát nyár (Eurovision Song Contest 2018)"                   : "Hungary",
+  "Hvala Ne"                                                      : "Slovenia",
+  "Tu Canción"                                                    : "Spain",
+  "Storm"                                                         : "United Kingdom",
+  "Monsters"                                                      : "Finland",
+  "O Jardim"                                                      : "Portugal",
+  "X My Heart"                                                    : "Azerbaijan",
+  "A Matter of Time"                                              : "Belgium",
+  "Stones"                                                        : "Switzerland",
+  "Oniro Mou"                                                     : "Greece",
+  "Qami"                                                          : "Armenia",
+  "Forever"                                                       : "Belarus",
+  "Crazy"                                                         : "Croatia",
+  "Lost & Found"                                                  : "North Macedonia", #Macedonia
+  "Our Choice"                                                    : "Iceland",
+  "Goodbye"                                                       : "Romania",
+  "Funny Girl"                                                    : "Latvia",
+  "Taboo"                                                         : "Malta",
+  "Light Me Up (feat. Lukas Meijer)"                              : "Poland",
+  "I Won't Break"                                                 : "Russia",
+  "Inje"                                                          : "Montenegro",
+  "Who We Are (feat. Jenifer Brening)"                            : "San Marino",
+  "For You"                                                       : "Georgia",
+}
+#+END_SRC
+
+#+RESULTS:
+
+***** data for 2019
+#+BEGIN_SRC python
+track_country_dict["2019"] = {
+  "Truth - Radio Edit"                                            : "Azerbaijan",
+  "Too Late For Love"                                             : "Sweden",
+  "Zero Gravity"                                                  : "Australia",
+  "Chameleon"                                                     : "Malta", 
+  "Soldi"                                                         : "Italy",
+  "Arcade"                                                        : "Netherlands", 
+  "Friend of a Friend"                                            : "Czech Republic",
+  "Hatrið mun sigra"                                              : "Iceland",
+  "Better Love"                                                   : "Greece",
+  "Roi"                                                           : "France",
+  "SCREAM"                                                        : "Russia",
+  "She Got Me"                                                    : "Switzerland",
+  "Like It"                                                       : "Belarus",
+  "Replay"                                                        : "Cyprus",
+  "Sister"                                                        : "Germany",
+  "Bigger Than Us"                                                : "United Kingdom",
+  "Love Is Forever"                                               : "Denmark", 
+  "Sebi - Dare To Dream Version"                                  : "Slovenia",
+  "Say Na Na Na"                                                  : "San Marino",
+  "Spirit in the Sky"                                             : "Norway",
+  "Fire Of Love (Pali Się)"                                       : "Poland",
+  "22"                                                            : "Ireland",
+  "Wake Up"                                                       : "Belgium",
+  "Proud"                                                         : "North Macedonia", #Macedonia
+  "Look Away"                                                     : "Finland",
+  "Limits"                                                        : "Austria",
+  "Storm"                                                         : "Estonia",
+  "Walking Out"                                                   : "Armenia",
+  "Run With the Lions"                                            : "Lithuania",
+  "Home"                                                          : "Israel",
+  "Az Én Apám - ESC Version"                                      : "Hungary",
+  "On a Sunday"                                                   : "Romania",
+  "Heaven"                                                        : "Montenegro",
+  "Stay"                                                          : "Moldova",
+  "That Night"                                                    : "Latvia",
+  "Ktheju Tokës - Eurovision 2019 / Albania"                      : "Albania",
+  "Kruna"                                                         : "Serbia",
+  "The Dream"                                                     : "Croatia",
+  "La Venda - Eurovision Song Contest / Tel Aviv 2019"            : "Spain",
+  "Telemóveis"                                                    : "Portugal",
+  "Keep On Going"                                                 : "Georgia",
+  "Siren Song"                                                    : "Ukraine",
+}
+#+END_SRC
+
+#+RESULTS:
+
+*** get_spotify_df()
+#+BEGIN_SRC python
+def get_spotify_df(dates):
+  columns = [
+    "year",
+    "country",
+    "track",
+    "genre_count",
+    "popularity",
+    "genres",
+    "has_eurovision", 
+    "has_only_eurovision"
+  ]
+  df = pd.DataFrame(columns=columns)
+  genres_per_track_dict, genre_count_per_track, popularity_per_track_dict = get_genre_data(dates)[2:]
+  i = 0
+  year_list = list()
+  country_list = list()
+  track_list = list()
+  genre_count_list = list()
+  popularity_list = list()
+  has_eurovision_list = list()
+  has_only_eurovision_list = list()
+  for date in dates:
+    #print("current date:",date)
+    for track in genres_per_track_dict[date]:
+      #if str(date) == "2017":
+      #  print("track:", track)
+      row = list()
+      row.append(date)
+      row.append(track_country_dict[date][track])
+      row.append(track)
+      row.append(genre_count_per_track[date][track])
+      row.append(popularity_per_track_dict[date][track])
+      row.append("$$$".join(genres_per_track_dict[date][track]))
+      if "eurovision" in genres_per_track_dict[date][track]:
+        row.append(1)
+        if len(genres_per_track_dict[date][track]) == 1:
+          row.append(1)
+        else:
+          row.append(0)
+      else:
+        row.append(0)
+        row.append(0)
+      df.loc[i] = row
+      row_df = pd.DataFrame([row], columns=columns)
+      df = pd.concat([df, row_df], ignore_index=True)
+      i += 1
+  df["year_country"] = df["year"] + "-" + df["country"]
+  dup_ind = list()
+  prev_year_country = list()
+  for i in range(len(df)):
+    row = df.iloc[i]
+    if row["year_country"] in prev_year_country:
+      dup_ind.append(i)
+    else:
+      prev_year_country.append(row["year_country"])
+  df = df.drop(dup_ind, axis=0)
+  return df
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :results file
+df = get_spotify_df(["2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018", "2019"])
+file_path = fig_dir / "data" / "spotify_data.csv"
+df.to_csv(file_path, mode="w", header=True, index=False)
+
+fig_dir / "data" / "spotify_data.csv"
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/data/spotify_data.csv]]
+
+* Exploration
+*** Distribution Plots
+***** plot_bar_countries()
+#+BEGIN_SRC python
+def plot_bar_countries(dates):
+  spotify_countries = list()
+  for date in dates:
+    for country in list(track_country_dict[date].values()):
+      spotify_countries.append(country)
+  spotify_counter = Counter(spotify_countries)
+  counter_array = np.array(spotify_counter.most_common())
+  fig = plt.figure(figsize=(30,30))
+  ax = fig.add_subplot(111)
+  x = counter_array[:,0]
+  y = counter_array[:,1].astype(np.int8)
+  ax.bar( x, y)
+  ax.plot(x, y, linewidth=10, color="orange")
+  title = str(
+    "Distribution of Countries from Eurovision "
+    + dates[0]
+  )
+  if len(dates) > 1:
+    title = str(
+      "Distribution of Countries from Eurovision "
+      + dates[0]
+      + "-"
+      + dates[-1][-2:]
+    )
+  ax.set_title(title, pad=-1000, fontsize=72)
+  ax.set_xlabel("Country", labelpad=40, fontsize=60)
+  ax.set_ylabel("Frequency", labelpad=40, fontsize=60)
+  ax.set_ylim(0, max(y) + 0.6)
+  ax.xaxis.grid(False)
+  ax.legend(fontsize=36, shadow=False)
+  font = {
+          'family': 'times new roman',
+          'color':  'black',
+          'weight': 'normal',
+          'size': 46,
+  }
+  freq_array = np.asarray([[i, np.sum(y == i)] for i in set(y)])[::-1]
+  for i,freq in enumerate(freq_array):
+      c = 1 if freq[1] > 2 else 0 
+      ratio = freq[1]/np.sum(freq_array[:,1])
+      #print("freq:",freq)
+      #print("ratio:",ratio)
+      if ratio >= 0.15 and len(dates) > 1:
+        c = 2
+      #print("c:",c) 
+      x_pos = np.sum(freq_array[:i,1]) + math.ceil(freq[1]/2) - c
+      y_pos = freq[0] + 0.15
+      text = str(freq[1])
+      if(freq[1] == 1):
+        text = str(
+          str(freq[1])
+          + " ("
+          + x[np.where(y == freq[0])][0]
+          + ")"
+        )
+      ax.text(x_pos, y_pos, text, fontdict=font)
+  ax.tick_params(axis='y', labelsize=48)
+  ax.yaxis.set_major_locator(ticker.FixedLocator(y))
+  ax.xaxis.set_major_locator(ticker.FixedLocator([]))
+  filename = str(
+    "spotify_countries_"
+    + dates[0][-2:]
+    +".png"
+  )
+  if len(dates) > 1:
+    filename = str(
+      "spotify_countries_"
+      + dates[0][-2:]
+      + "_"
+      + dates[-1][-2:]
+      + ".pdf"
+    )
+  plt.savefig(
+    fig_dir / "plots" / filename, 
+    bbox_inches="tight", 
+    dpi=fig.dpi,
+    format="pdf"
+  )
+  plt.close("all")
+  return fig_dir / "plots" / filename, counter_array
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :results file
+  path, country_counter = plot_bar_countries([str(2010+i) for i in range(10)])
+  path
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/plots/spotify_countries_10_19.pdf]]
+
+***** plot_essentia_spotify_countires()
+****** Collecting Data
+#+BEGIN_SRC python
+dates = [str(2010+i) for i in range(10)]
+
+essentia_df = pd.read_csv("data/features.csv", usecols=["year","country"])
+essentia_countries = essentia_df[essentia_df.year.isin(dates)].country
+essentia_country_counter = Counter(essentia_countries)
+spotify_df = get_spotify_df(dates)
+spotify_countries = spotify_df.country
+#+END_SRC
+
+#+RESULTS:
+
+****** Assembling DataFrame
+#+BEGIN_SRC python
+spotify_country_counter = Counter(spotify_countries)
+spotify_counter_array = np.asarray(spotify_country_counter.most_common())
+
+essentia_freq_list = list()
+drop_ind = list()
+for i,(name,freq) in enumerate(spotify_counter_array):
+  try:
+    real_ind = list(essentia_country_counter.keys()).index(name)
+    essentia_freq_list.append(list(essentia_country_counter.values())[real_ind])
+  except ValueError:
+    drop_ind.append(i)
+
+essentia_spotify_country_df = pd.DataFrame({
+  "country"       : spotify_counter_array[:,0],
+  "spotify_freq"  : spotify_counter_array[:,1],
+})
+
+essentia_spotify_country_df = essentia_spotify_country_df.drop(drop_ind)
+
+essentia_spotify_country_df["essentia_freq"] = essentia_freq_list
+
+
+essentia_spotify_country_df["spotify_freq"] = essentia_spotify_country_df["spotify_freq"].astype(np.int32)
+essentia_spotify_country_df["essentia_freq"] = essentia_spotify_country_df["essentia_freq"].astype(np.int32)
+
+essentia_spotify_country_df = essentia_spotify_country_df.sort_values(by=["essentia_freq"], ascending=False)
+#+END_SRC
+
+#+RESULTS:
+
+****** Plotting Distribution
+#+BEGIN_SRC python :results file
+fig = plt.figure(figsize=(50,30))
+ax = fig.add_subplot(111)
+x = np.arange(len(essentia_spotify_country_df))
+y_1 = essentia_spotify_country_df.essentia_freq
+ax.bar( 
+  x, y_1, 
+  alpha=0.5, 
+  label="Countries present in ESC",
+  #align="edge"
+)
+ax.plot(x, y_1, linewidth=10, color="orange")
+
+y_2 = essentia_spotify_country_df.spotify_freq
+ax.bar( 
+  x, y_2, 
+  alpha=0.5, 
+  label="Available Countries in Spotify", 
+  color="red",
+  #align="edge"
+)
+title = str(
+  "Distribution of Countries from Eurovision "
+  + dates[0]
+)
+
+if len(dates) > 1:
+  title = str(
+    "Distribution of Countries from Eurovision "
+    + dates[0]
+    + "-"
+    + dates[-1][-2:]
+  )
+
+ax.set_title(title, pad=0, fontsize=72)
+ax.set_xlabel("Country", labelpad=40, fontsize=60)
+ax.set_ylabel("Frequency", labelpad=40, fontsize=60)
+ax.set_ylim(0, 11)
+ax.set_xlim(-0.5, max(x) + 0.5)
+ax.xaxis.grid(False)
+ax.legend(fontsioze=36, shadow=False)
+
+ax.set_xticks(x)
+ax.set_xticklabels(essentia_spotify_country_df.country)
+ax.yaxis.set_major_locator(ticker.MultipleLocator(2))
+plt.setp( ax.xaxis.get_majorticklabels(), rotation=90)
+ax.legend(prop={"size":56})
+
+font = {
+        'family': 'times new roman',
+        'color':  'black',
+        'weight': 'normal',
+        'size': 48,
+}
+
+
+
+freq_array = np.asarray([[i, np.sum(y_1 == i)] for i in set(y_1)])[::-1]
+for i,freq in enumerate(freq_array):
+  c = 1 if freq[1] > 1 else 0.5
+  ratio = freq[1]/np.sum(freq_array[:,1])
+  #print("i:",i)
+  #print("freq:",freq)
+  #print("ratio:",ratio)
+  if ratio >= 0.50:
+    c = 1
+  elif ratio > 0.1:
+    c = 1
+  elif ratio > 0.04:
+    c = 0.75
+  print("c:",c) 
+  x_pos = np.sum(freq_array[:i,1]) + math.ceil(freq[1]/2) - c
+  y_pos = freq[0] + 0.1
+  text = str(freq[1])
+  ax.text(x_pos, y_pos, text, fontdict=font)
+
+ax.tick_params(axis='y', labelsize=48, pad=20)
+ax.tick_params(axis='x', labelsize=48)
+filename = str(
+  "countries_"
+  + dates[0][-2:]
+  +".png"
+)
+
+
+if (len(dates) > 1):
+  filename = str(
+    "countries_"
+    + dates[0][-2:]
+    + "_"
+    + dates[-1][-2:]
+    + ".pdf"
+  )
+
+#filename = "test.png"
+file_path = fig_dir / "plots" / filename
+#plt.savefig(file_path)
+plt.savefig(
+  fig_dir / "plots" / filename, 
+  bbox_inches="tight", 
+  dpi=fig.dpi,
+  format="pdf"
+)
+plt.close("all")
+
+fig_dir / "plots" / filename
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/plots/countries_10_19.pdf]]
+
+****** plot_essentia_spotify_countires()
+#+BEGIN_SRC python
+def plot_essentia_spotify_countries(dates):
+  essentia_df = pd.read_csv("data/features.csv", usecols=["year","country"])
+  essentia_countries = essentia_df[essentia_df.year.isin(dates)].country
+  essentia_country_counter = Counter(essentia_countries)
+  spotify_df = get_spotify_df(dates)
+  spotify_countries = spotify_df.country
+  spotify_country_counter = Counter(spotify_countries)
+  spotify_counter_array = np.asarray(spotify_country_counter.most_common())
+  essentia_freq_list = list()
+  drop_ind = list()
+  for i,(name,freq) in enumerate(spotify_counter_array):
+    try:
+      real_ind = list(essentia_country_counter.keys()).index(name)
+      essentia_freq_list.append(list(essentia_country_counter.values())[real_ind])
+    except ValueError:
+      drop_ind.append(i)
+  essentia_spotify_country_df = pd.DataFrame({
+    "country"       : spotify_counter_array[:,0],
+    "spotify_freq"  : spotify_counter_array[:,1],
+  })
+  essentia_spotify_country_df = essentia_spotify_country_df.drop(drop_ind)
+  essentia_spotify_country_df["essentia_freq"] = essentia_freq_list
+  essentia_spotify_country_df["spotify_freq"] = essentia_spotify_country_df["spotify_freq"].astype(np.int32)
+  essentia_spotify_country_df["essentia_freq"] = essentia_spotify_country_df["essentia_freq"].astype(np.int32)
+  essentia_spotify_country_df = essentia_spotify_country_df.sort_values(by=["essentia_freq"], ascending=False)
+  fig = plt.figure(figsize=(
+    30,
+    27)
+  )
+  ax = fig.add_subplot(
+    111,
+    #aspect="equal"
+  )
+  x = np.arange(len(essentia_spotify_country_df))
+  y_1 = essentia_spotify_country_df.essentia_freq
+  ax.bar( 
+    x, y_1, 
+    alpha=0.5, 
+    label="Countries present in the final round of ESC"
+  )
+  ax.plot(x, y_1, linewidth=10, color="orange")
+  y_2 = essentia_spotify_country_df.spotify_freq
+  ax.bar( 
+    x, y_2, 
+    alpha=0.5, 
+    label="Countries from Spotify", 
+    color="red"
+  )
+  title = str(
+    "Distribution of Countries from Eurovision "
+    + dates[0]
+  )
+  if len(dates) > 1:
+    title = str(
+      "Distribution of Countries from Eurovision "
+      + dates[0]
+      + "-"
+      + dates[-1][-2:]
+    )
+  ax.set_title(title, pad=40, fontsize=72)
+  ax.set_xlabel("Country", labelpad=40, fontsize=60)
+  ax.set_ylabel("Frequency", labelpad=40, fontsize=60)
+  ax.set_ylim(0, 11)
+  ax.set_xlim(-0.5, max(x) + 0.5)
+  ax.xaxis.grid(False)
+  ax.legend(fontsize=36, shadow=False)
+  ax.set_xticks(x)
+  ax.set_xticklabels(essentia_spotify_country_df.country)
+  ax.yaxis.set_major_locator(ticker.MultipleLocator(2))
+  plt.setp( ax.xaxis.get_majorticklabels(), rotation=90)
+  font = {
+    'family': 'times new roman',
+    'color':  'black',
+    'weight': 'normal',
+    'size': 46,
+  }
+  freq_array = np.asarray([[i, np.sum(y_1 == i)] for i in set(y_1)])[::-1]
+  for i,freq in enumerate(freq_array):
+    c = 1 if freq[1] > 1 else 0.5
+    ratio = freq[1]/np.sum(freq_array[:,1])
+    if ratio >= 0.50:
+      c = 2
+    elif ratio > 0.1:
+      c = 1.5
+    x_pos = np.sum(freq_array[:i,1]) + math.ceil(freq[1]/2) - c
+    y_pos = freq[0] + 0.1
+    text = str(freq[1])
+    ax.text(x_pos, y_pos, text, fontdict=font)
+  ax.tick_params(axis='y', labelsize=34, pad=20)
+  ax.tick_params(axis='x', labelsize=34)
+  filename = str(
+    "countries_"
+    + dates[0][-2:]
+    +".png"
+  )
+  if (len(dates) > 1):
+    filename = str(
+      "countries_"
+      + dates[0][-2:]
+      + "_"
+      + dates[-1][-2:]
+      + ".png"
+    )
+  plt.gcf().subplots_adjust(
+    #bottom=0.10
+    bottom=0.22
+  )
+  plt.savefig(fig_dir / "plots" / filename)
+  plt.close("all")
+  return fig_dir / "plots" / filename, essentia_spotify_country_df
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :results file
+filepath, essentia_spotify_country_df = plot_essentia_spotify_countries([str(2010+i) for i in range(10)])
+
+filepath
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC/capstone/plots/countries_10_19.png]]
+
+***** plot_bar_genres()
+#+BEGIN_SRC python
+def plot_bar_genres(genre_counter, title, filename):
+  counter_array = np.asarray(genre_counter)
+  fig = plt.figure(figsize=(30,30))
+  ax = fig.add_subplot(111)
+  x = counter_array[:,0]
+  y = counter_array[:,1].astype(np.int8)
+  ax.bar( x, y)
+  ax.plot(x, y, linewidth=10, color="orange")
+  ax.set_title(title, pad=-1000, fontsize=72)
+  ax.set_xlabel("Genre", labelpad=40, fontsize=60)
+  ax.set_ylabel("Frequency", labelpad=40, fontsize=60)
+  ax.set_ylim(0, max(y) + 0.6)
+  font = {
+          'family': 'times new roman',
+          'color':  'black',
+          'weight': 'normal',
+          'size': 46,
+  }
+  stat_font = {
+          'family': 'times new roman',
+          'color':  'black',
+          'weight': 'normal',
+          'size': 46,
+          "linespacing" : 2
+  }
+  freq_array = np.asarray([[i, np.sum(y == i)] for i in set(y)])[::-1]
+  for i,freq in enumerate(freq_array):
+      c =  (freq_array[len(freq_array)-1-i,0] - np.sum(freq_array[:,1] <= 2)) if freq[1] > 4 else 0
+      x_pos = np.sum(freq_array[:i,1]) + math.ceil(freq[1]/2) - c
+      y_pos = freq[0] + 0.05
+      ax.text(x_pos, y_pos, str(freq[1]), fontdict=font)
+  stat_text = str(
+        "# of songs with no genre: "
+        + str(no_genre_count)
+        + "\n"
+        + "# of songs in 2017: "
+        + str(len(results_2017['items']))
+        + "\n"
+        + "# of songs in 2018: "
+        + str(len(results_2018['items']))
+        + "\n"
+        + "# of songs in 2019: "
+        + str(len(results_2019['items']))
+  )
+  props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+  ax.text(0.55, 0.90, stat_text, transform=ax.transAxes, fontdict=stat_font,
+        verticalalignment='top', bbox=props)
+  ax.tick_params(axis='y', labelsize=48)
+  ax.yaxis.set_major_locator(ticker.FixedLocator(list(range(max(y)+1))))
+  ax.xaxis.set_major_locator(ticker.FixedLocator([]))
+  plt.savefig(fig_dir / filename)
+  plt.close("all")
+  return fig_dir / filename
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :results file
+  plot_bar_genres(
+      unique_genre_count.most_common(),
+      "Distribution of Genres from Eurovision 2017-19",
+      "genres_17_19.png"
+  )
+#+END_SRC
+
+#+RESULTS:
+
+***** plot_bar_genres_02()
+#+BEGIN_SRC python
+def plot_bar_genres_02(dates):
+  #genre_dict,no_genre_dict, genres_per_track_dict = get_genre_data(dates)[:3]
+  spotify_df = get_spotify_df(dates)
+  #genres = genre_dict[list(genre_dict.keys())[0]]
+  genres = list()
+  for genre_string in spotify_df.genres:
+    if len(genre_string) != 0 :
+      curr_genres = genre_string.split("$$$")
+      for gnr in curr_genres:
+        genres.append(gnr)
+  #for date in list(genre_dict.keys())[1:]:
+    #genres = np.append(genres, genre_dict[date])
+  genre_counter = Counter(genres)
+  del genre_counter["eurovision"]
+  counter_array = np.asarray(genre_counter.most_common())
+  fig = plt.figure(figsize=(30,30))
+  ax = fig.add_subplot(111)
+  x = counter_array[:,0]
+  y = counter_array[:,1].astype(np.int8)
+  ax.bar( x, y)
+  ax.plot(x, y, linewidth=10, color="orange")
+  title = str(
+    "Distribution of Genres from Eurovision "
+    + dates[0]
+  )
+  if len(dates) > 1:
+    title = str(
+      "Distribution of Genres from Eurovision "
+      + dates[0]
+      + "-"
+      + dates[-1][-2:]
+    )
+  ax.set_title(title, pad=60, fontsize=72)
+  ax.set_xlabel("Genre", labelpad=40, fontsize=60)
+  ax.set_ylabel("Frequency", labelpad=40, fontsize=60)
+  ax.set_ylim(0, max(y) + 0.6)
+  font = {
+          'family': 'times new roman',
+          'color':  'black',
+          'weight': 'normal',
+          'size': 46,
+  }
+  stat_font = {
+          'family': 'times new roman',
+          'color':  'black',
+          'weight': 'normal',
+          'size': 46,
+          "linespacing" : 1.5
+  }
+  freq_array = np.asarray([[i, np.sum(y == i)] for i in set(y)])[::-1]
+  for i,freq in enumerate(freq_array):
+      #print("freq:",freq)
+      c = (freq_array[len(freq_array)-1-i,0] - np.sum(freq_array[:,1] <= 2)) if freq[1] > 2 else 0 
+      #print("c:",c)
+      ratio = freq[1]/np.sum(freq_array[:,1])
+      if ratio >= 0.1 and len(dates) > 1:
+        c = 3
+      elif ratio <= 0.08 and ratio >= 0.07:
+        c = 2
+      elif ratio <= 0.07 and ratio >= 0.06:
+        c = 2
+      elif ratio <= 0.04 and ratio >= 0.03:
+        c = 2
+      #print("ratio:",ratio)
+      #print("c:",c)
+      x_pos = np.sum(freq_array[:i,1]) + math.ceil(freq[1]/2) - c
+      y_pos = freq[0] + 0.15
+      text = str(freq[1])
+      if(freq[1] == 1):
+        text = str(
+          str(freq[1])
+          + " ("
+          + x[np.where(y == freq[0])][0]
+          + ")"
+        )
+      ax.text(x_pos, y_pos, text, fontdict=font)
+  #stats_list = list()
+  #stats_list.append(str(
+    #"# of songs with no genre: "
+    #+ str(np.sum(list(no_genre_dict.values())))))
+  #for date in dates:
+    #stats_list.append(str(
+      #"# of songs in "
+      #+ str(date)
+      #+ ": "
+      #+ str(len(genres_per_track_dict[date].keys()))))
+  #stat_text = "\n".join(stats_list)
+  #props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+  #ax.text(0.55, 0.90, stat_text, transform=ax.transAxes, fontdict=stat_font,
+  #      verticalalignment='top', bbox=props)
+  ax.tick_params(axis='y', labelsize=48)
+  ax.yaxis.set_major_locator(ticker.FixedLocator(freq_array[:,0][::-1]))
+  ax.xaxis.set_major_locator(ticker.FixedLocator([]))
+  filename = str(
+    "genres_"
+    + dates[0][-2:]
+    +".png"
+  )
+  if len(dates) > 1:
+    filename = str(
+      "genres_"
+      + dates[0][-2:]
+      + "_"
+      + dates[-1][-2:]
+      + ".pdf"
+    )
+  plt.savefig(fig_dir / "plots" / filename, bbox_inches = "tight", dpi=fig.dpi)
+  plt.close("all")
+  return fig_dir / "plots" / filename, counter_array
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :results file
+  path, genre_counter_array = plot_bar_genres_02([str(2010+i) for i in range(10)])
+  path
+#+END_SRC
+
+#+RESULTS:
+
+***** get_eurovision_genre_data()
+#+BEGIN_SRC python
+def get_eurovision_genre_data(dates):
+  genres_per_track_dict = get_genre_data(dates)[2]
+  songs_without_eurovision = dict()
+  songs_with_eurovision = dict()
+  songs_with_only_eurovision = dict()
+  for date in dates:
+    songs_without_eurovision[date] =   list()
+    songs_with_eurovision[date] =      list()
+    songs_with_only_eurovision[date] = list()
+    for track in genres_per_track_dict[date]:
+      print("track: ",track)
+      if "eurovision" in genres_per_track_dict[date][track]:
+        songs_with_eurovision[date].append(track)
+        if len(genres_per_track_dict[date][track]) == 1:
+          songs_with_only_eurovision[date].append(track)
+      else:
+        songs_without_eurovision[date].append(track)
+  return songs_with_eurovision, songs_with_only_eurovision, songs_without_eurovision  
+#+END_SRC
+
+***** plot_eurovision_genre
+#+BEGIN_SRC python
+def plot_eurovision_genre(dates):
+  spotify_df = get_spotify_df(dates)
+  fig = plt.figure(figsize=(30,30))
+  ax = fig.add_subplot(111)
+  songs_without_eurovision = dict()
+  songs_with_eurovision = dict()
+  songs_with_only_eurovision = dict()
+  for date in dates:
+    songs_without_eurovision[date]   = np.sum(spotify_df[spotify_df.year == date].has_eurovision == 0)
+    songs_with_eurovision[date]      = np.sum(spotify_df[spotify_df.year == date].has_eurovision)
+    songs_with_only_eurovision[date] = np.sum(spotify_df[spotify_df.year == date].has_only_eurovision)
+  without_eurovision_df = pd.DataFrame(
+    list(zip(dates, list(songs_without_eurovision.values()))),
+    columns=["Year","Count"]
+  )
+  y_ticks = np.array(without_eurovision_df["Count"].astype(np.float32).astype(np.int8))
+  with_eurovision_df = pd.DataFrame(
+    list(zip(dates, list(songs_with_eurovision.values()))),
+    columns=["Year","Count"]
+  )
+  y_ticks = np.append(y_ticks, with_eurovision_df["Count"].astype(np.float32).astype(np.int8))
+  with_only_eurovision_df = pd.DataFrame(
+    list(zip(dates, list(songs_with_only_eurovision.values()))),
+    columns=["Year","Count"]
+  )
+  y_ticks = np.append(y_ticks, with_only_eurovision_df["Count"].astype(np.float32).astype(np.int8))
+  x = np.arange(len(dates))
+  width = 0.30
+  ax.bar(
+    x - width, 
+    without_eurovision_df["Count"].astype(np.float32).astype(np.int8), 
+    width=width, 
+    align='center',
+    label ="Songs without \"eurovision\" genre label"
+  )
+  ax.bar(
+    x, 
+    with_eurovision_df["Count"].astype(np.float32).astype(np.int8), 
+    width=width, 
+    align='center',
+    label="Songs with \"eurovision\" genre label"
+  )
+  ax.bar(
+    x + width, 
+    with_only_eurovision_df["Count"].astype(np.float32).astype(np.int8), 
+    width = width, 
+    align='center',
+    label="Songs with only \"eurovision\" genre label"
+  )
+  title = "Distribution of \"Eurovision\" Genre from " + dates[0]
+  if len(dates) > 1:
+    title = str(
+      "Distribution of \"Eurovision\" Genre from "
+      + dates[0]
+      + "-"
+      + dates[-1][-2:]
+    )
+  ax.set_ylim(0, np.max(y_ticks) + 5)
+  ax.legend(prop={'size': 40})
+  ax.set_title(title, pad=0, fontsize=72)
+  ax.set_xlabel("Year", labelpad=40, fontsize=60)
+  ax.set_ylabel("Number of Songs", labelpad=40, fontsize=60)
+  ax.tick_params(axis='x', labelsize=56, pad=10)
+  ax.tick_params(axis='y', labelsize=48)
+  ax.yaxis.set_major_locator(ticker.FixedLocator(y_ticks))
+  ax.set_xticks(x)
+  ax.set_xticklabels(dates)
+  ax.xaxis.grid(False)
+  filename = str(
+    "eurovision_"
+    + dates[0][-2:]
+    +".png"
+  )
+  if len(dates) > 1:
+    filename = str(
+      "eurovision_"
+      + dates[0][-2:]
+      + "_"
+      + dates[-1][-2:]
+      + ".png"
+    )
+  plt.savefig(
+    fig_dir / "plots" / filename, 
+    bbox_inches="tight", 
+    dpi=fig.dpi,
+    #optimize=True,
+    #progressive=True,
+  )
+  plt.close("all")
+  return fig_dir / "plots" / filename
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :results file
+plot_eurovision_genre([str(2010 + i) for i in range(10)])
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/plots/eurovision_10_19.jpg]]
+
+#+BEGIN_SRC python
+labels = ["2010", "2011", "2012","2013", "2014"]
+men_means = [20, 34, 30, 35, 27]
+women_means = [25, 32, 34, 20, 25]
+
+x = np.arange(len(labels))  # the label locations
+width = 0.35  # the width of the bars
+
+fig, ax = plt.subplots()
+rects1 = ax.bar(x - width/2, men_means, width, label='Men')
+rects2 = ax.bar(x + width/2, women_means, width, label='Women')
+
+# Add some text for labels, title and custom x-axis tick labels, etc.
+ax.set_ylabel('Scores')
+ax.set_title('Scores by group and gender')
+ax.set_xticks(x)
+ax.set_xticklabels(labels)
+ax.legend()
+
+
+def autolabel(rects):
+  """Attach a text label above each bar in *rects*, displaying its height."""
+  for rect in rects:
+    height = rect.get_height()
+    ax.annotate('{}'.format(height),
+      xy=(rect.get_x() + rect.get_width() / 2, height),
+      xytext=(0, 3),  # 3 points vertical offset
+      textcoords="offset points",
+      ha='center', va='bottom')
+
+
+autolabel(rects1)
+autolabel(rects2)
+
+fig.tight_layout()
+plt.savefig(fig_dir / "test.png")
+plt.close("all")
+fig_dir / "test.png"
+#+END_SRC
+
+#+RESULTS:
+: /Users/antoniomendes/AUC/test.png
+
+***** plot_missing_genres()
+#+BEGIN_SRC python
+def plot_missing_genres(dates):
+  #no_genre_dict, genres_per_track_dict = get_genre_data(dates)[1:3]
+  spotify_df = get_spotify_df(dates)
+  fig = plt.figure(figsize=(30,30))
+  ax = fig.add_subplot(111)
+  x = dates
+  y1 = list()
+  y2 = list()
+  for date in dates:
+    y1.append(len(spotify_df[spotify_df["year"] ==date]))
+    no_genre_df = spotify_df[(spotify_df["year"]== date) & (spotify_df["genre_count"]==0)]
+    y2.append(len(no_genre_df))
+    #y1.append(len(genres_per_track_dict[date].keys()))
+  ax.bar( x, y1, alpha=0.5, label="Total Songs")
+  #y2 = list(no_genre_dict.values())
+  y_ticks = np.append(y1, y2)
+  ax.bar( x, y2, label="Songs with no Genre")
+  ax.legend(fontsize=36, shadow=False)
+  title = str(
+    "Distribution of Songs from Eurovision "
+    + dates[0]
+  )
+  if len(dates) > 1:
+    title = str(
+      "Distribution of Songs from Eurovision "
+      + dates[0]
+      + "-"
+      + dates[-1][-2:]
+    )
+  ax.set_ylim(0, np.max(y_ticks) + 5)
+  ax.set_title(title, pad=0, fontsize=72)
+  ax.set_xlabel("Year", labelpad=40, fontsize=60)
+  ax.set_ylabel("Number of Songs", labelpad=40, fontsize=60)
+  x_tick_size = 48 if len(dates) < 11 else 28
+  ax.tick_params(axis='x', labelsize=x_tick_size)
+  ax.tick_params(axis='y', labelsize=36)
+  ax.yaxis.set_major_locator(ticker.FixedLocator(y_ticks))
+  ax.xaxis.grid(False)
+  filename = str(
+    "no_genres_"
+    + dates[0][-2:]
+    +".png"
+  )
+  if len(dates) > 1:
+    filename = str(
+      "no_genres_"
+      + dates[0][-2:]
+      + "_"
+      + dates[-1][-2:]
+      + ".png"
+    )
+  plt.savefig(
+    fig_dir / "plots" / filename,
+    bbox_inches="tight",
+    dpi=fig.dpi,
+  )
+  plt.close("all")
+  return fig_dir / "plots" / filename
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python :results file
+plot_missing_genres([str(2010+i) for i in range(10)])
+plot_missing_genres([str(2000+i) for i in range(20)])
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/plots/no_genres_00_19.png]]
+
+***** plot_popularity()
+#+BEGIN_SRC python
+def plot_popularity(year):
+  genre_count_per_track, popularity_per_track_dict = get_genre_data(year)[3:]
+  genre_count_per_track = genre_count_per_track[year[0]]
+  popularity_per_track = popularity_per_track_dict[year[0]]
+  df = pd.DataFrame({
+    "genre_count" : genre_count_per_track,
+    "popularity" : popularity_per_track
+  })
+  df = df.sort_values(by=["genre_count", "popularity"])
+  fig = plt.figure(figsize=(30,30))
+  ax = fig.add_subplot(111)
+  x = df.genre_count
+  y = df.popularity
+  s = 500
+  ax.scatter( x, y, s=s)
+  title = str(
+    "Popularity vs Genres in Songs from Eurovision "
+    + year[0]
+  )
+  ax.set_title(title, pad=40, fontsize=72)
+  ax.set_xlabel("Number of Genres", labelpad=40, fontsize=60)
+  ax.set_ylabel("Popularity", labelpad=40, fontsize=60)
+  ax.tick_params(axis='x', labelsize=48)
+  ax.tick_params(axis='y', labelsize=48)
+  ax.xaxis.set_major_locator(ticker.FixedLocator(x))
+  filename = str("pop_" + year[0] + ".png")
+  plt.savefig(fig_dir / "plots" / filename)
+  plt.close("all")
+  return fig_dir / "plots" / filename
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python
+plot_popularity(["2015"])
+#+END_SRC
+
+#+RESULTS:
+: /Users/antoniomendes/AUC/capstone/plots/pop_2015.png
+
+***** General Statistics
+#+BEGIN_SRC python
+genre_dict,no_genre_dict, genres_per_track_dict = get_genre_data([str(2010 + i) for i in range(10)])[:3]
+genres = genre_dict[list(genre_dict.keys())[0]]
+for date in list(genre_dict.keys())[1:]:
+  genres = np.append(genres, genre_dict[date])
+
+genre_counter = Counter(genres)
+
+del genre_counter["eurovision"]
+#+END_SRC
+
+#+RESULTS:
+
+
+#+BEGIN_SRC python
+spostify_df = get_spotify_df(["2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018", "2019"])
+#+END_SRC
+
+#+RESULTS:
+: Counter({'europop': 13, 'swedish pop': 12, 'moldovan pop': 10, 'ukrainian pop': 8, 'russian pop': 8, 'dutch pop': 8, 'azeri pop': 7, 'greek pop': 7, 'croatian pop': 7, 'montenegrin pop': 7, 'estonian pop': 6, 'hungarian pop': 6, 'cypriot pop': 6, 'dutch rock': 6, 'italian pop': 6, 'italian arena pop': 6, 'australian pop': 6, 'russian dance pop': 6, 'turbo folk': 5, 'albanian pop': 5, 'spanish pop': 5, 'lithuanian pop': 5, 'macedonian pop': 5, 'swedish idol pop': 5, 'polish pop': 5, 'german pop': 4, 'laiko': 4, 'israeli pop': 4, 'icelandic pop': 4, 'slovenian pop': 4, 'maltese pop': 4, 'talent show': 4, 'portuguese pop': 4, 'turkish rock': 3, 'francoton': 3, 'french pop': 3, 'swiss pop': 3, 'yugoslav rock': 3, 'operatic pop': 3, 'electropop': 3, 'kosovan pop': 3, 'latin arena pop': 3, 'norwegian pop': 3, 'belgian pop': 3, 'belarusian pop': 3, 'dutch americana': 3, 'armenian pop': 3, 'ukrainian indie': 3, 'ukrainian rock': 3, 'sevdah': 2, 'dance pop': 2, 'romanian rock': 2, 'latin pop': 2, 'spanish pop rock': 2, 'italian pop rock': 2, 'dutch indie': 2, 'magyar alternative': 2, 'eurodance': 2, 'finnish pop': 2, 'pop': 2, 'strut': 2, 'romanian pop': 2, 'finnish idol pop': 2, 'australian indigenous': 2, 'italian progressive rock': 2, 'austrian pop': 2, 'tatar pop': 2, 'czech pop': 2, 'latin talent show': 2, 'latin viral pop': 2, 'carnaval': 1, 'slovak pop': 1, 'danish pop rock': 1, 'boy band': 1, 'finlandssvenska musik': 1, 'swiss indie': 1, 'kenyan pop': 1, 'norwegian hip hop': 1, 'galician indie': 1, 'gypsy punk': 1, 'levenslied': 1, 'latvian pop': 1, 'turkish pop': 1, 'indonesian pop': 1, 'indonesian rock': 1, 'adult standards': 1, 'brill building pop': 1, 'easy listening': 1, 'lounge': 1, 'swiss rock': 1, 'bulgarian pop': 1, 'chalga': 1, 'nederpop': 1, 'bubblegum dance': 1, 'german techno': 1, 'melbourne bounce international': 1, 'pop rap': 1, 'macedonian folk': 1, 'big room': 1, 'edm': 1, 'new wave pop': 1, 'soft rock': 1, 'balkan hip hop': 1, 'classic swedish pop': 1, 'danish hip hop': 1, 'danish pop': 1, 'slovenian rock': 1, 'barnalog': 1, 'c64': 1, 'finnish punk': 1, 'australian talent show': 1, 'armenian folk': 1, 'italian alternative': 1, 'estonian hip hop': 1, 'broken beat': 1, 'deep dubstep': 1, 'azeri traditional': 1, 'classic icelandic pop': 1, 'viral pop': 1, 'irish singer-songwriter': 1, 'world chill': 1, 'hungarian metal': 1, 'macedonian indie': 1, 'australian singer-songwriter': 1, 'lilith': 1, 'piano rock': 1, 'icelandic electronic': 1, 'icelandic rock': 1, 'greek indie': 1, 'variete francaise': 1, 'polish folk': 1, 'finnish edm': 1, 'melodipop': 1, 'reggae catala': 1})
+
+
+#+BEGIN_SRC python
+genre_name_column_dict = dict()
+
+for j in range(7):
+  genre_name_column_dict[j] = list()
+
+for i in range(len(spotify_df)):
+  genre_string = spotify_df.iloc[i]["genres"]
+  track_genre_names = list()
+  if type(genre_string) == str:
+    if "$$$" in genre_string:
+      for genre in genre_string.split("$$$"):
+        track_genre_names.append(genre)
+    elif len(genre_string) > 0:
+      track_genre_names.append(genre_string)
+  for j in range(7 - len(track_genre_names)):
+    track_genre_names.append('')
+  for j,genre_name in enumerate(track_genre_names):
+    genre_name_column_dict[j].append(genre_name)
+
+for j in range(7):
+  column_name = str(
+    "genre_name_"
+    + str(j)
+  )
+  spotify_df[column_name] = genre_name_column_dict[j]
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC python
+netherlands_df = spotify_df[spotify_df.country == "Netherlands"]
+
+netherlands_df[np.append(
+  ["track", "year"],
+  [str("genre_name_" + str(i)) for i in range(4)]
+)]
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+                                 track  year     genre_name_0 genre_name_1 genre_name_2 genre_name_3
+34    Ik Ben Verliefd (sha - La - Lie)  2010         carnaval                                       
+67                         Never Alone  2011        dutch pop   dutch rock   levenslied             
+105                         You and Me  2012       eurovision                                       
+117                              Birds  2013      dutch indie    dutch pop   dutch rock     nederpop
+154  Calm After The Storm - Radio Edit  2014  dutch americana    dutch pop   dutch rock             
+224                         Walk Along  2015        dutch pop   dutch rock                          
+248                          Slow Down  2016  dutch americana  dutch indie    dutch pop   dutch rock
+304                 Lights and Shadows  2017        dutch pop                                       
+344        Outlaw In 'Em - Single Edit  2018  dutch americana    dutch pop   dutch rock             
+375                             Arcade  2019        dutch pop                                       
+#+end_example
+
+
+#+BEGIN_SRC python
+np.sum(netherlands_df.genre_name_0 == "dutch pop")
+
+np.sum(netherlands_df.genre_name_1 == "dutch pop")
+#+END_SRC
+
+#+RESULTS:
+: 3
+
+#+BEGIN_SRC python
+portugal_df = spotify_df[spotify_df.country == "Portugal"]
+
+portugal_df[np.append(
+  ["track", "year"],
+  [str("genre_name_" + str(i)) for i in range(4)]
+)]
+#+END_SRC
+
+#+RESULTS:
+:                                                  track  year    genre_name_0    genre_name_1 genre_name_2 genre_name_3
+: 19                            Há Dias Assim - Portugal  2010                                                          
+: 106                            Vida Minha - Radio Edit  2012      eurovision                                          
+: 173                                      Quero Ser Tua  2014                                                          
+: 239  Há Um Mar Que Nos Separa - Eurovision 2015 - P...  2015      eurovision  portuguese pop                          
+: 285                                    Amar pelos Dois  2017  portuguese pop                                          
+: 352                                           O Jardim  2018  portuguese pop                                          
+: 409                                         Telemóveis  2019  portuguese pop                                          
