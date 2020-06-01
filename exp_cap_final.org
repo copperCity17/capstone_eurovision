@@ -28,12 +28,12 @@
 import os
 from pathlib import Path
 cwd = os.path.abspath(os.getcwd())
-fig_dir = Path("/".join(cwd.split("/")[:-1])) / "capstone"
+fig_dir = Path("/".join(cwd.split("/")[:-1])) / "capstone_eurovision"
 fig_dir
 #+END_SRC
 
 #+RESULTS:
-: /Users/antoniomendes/AUC_code/capstone
+: /Users/antoniomendes/AUC_code/capstone/capstone_eurovision
 
 *** sklearn
 #+BEGIN_SRC python
@@ -398,8 +398,6 @@ ax.set_xticklabels(aggregate_df.genre)
 ax.set_ylabel("Place at Finals", labelpad=40, fontsize=60)
 ax.tick_params(axis='x', labelsize=20)
 plt.setp( ax.xaxis.get_majorticklabels(), rotation=90)
-ax.tick_params(axis='y', labelsize=48)
-ax.tick_params(axis='x', labelsize=40)
 
 ax.set_xlim(-1,np.max(x) + 1)
 ax.set_ylim(-1,np.max(y) + 1)
@@ -408,17 +406,26 @@ plt.gcf().subplots_adjust(
   left = 0.1,
   bottom=0.25
 )
+
+ax.tick_params(axis='x', labelsize=40)
+ax.tick_params(axis='y', labelsize=48)
+
+filename = str(
+  "spotify_genre_place_final_sorted" 
+  + ".png"
+)
+
 plt.savefig(
-  fig_dir / "plots" / "spotify_genre_place_final_sorted.pdf",
+  fig_dir / "plots" / filename,
   bbox_inches="tight", 
   dpi = fig.dpi,
 )
 plt.close("all")
-fig_dir / "plots" / "spotify_genre_place_final_sorted.pdf"
+fig_dir / "plots" / filename
 #+END_SRC
 
 #+RESULTS:
-[[file:/Users/antoniomendes/AUC_code/capstone/plots/spotify_genre_place_final_sorted.pdf]]
+[[file:/Users/antoniomendes/AUC_code/capstone/capstone_eurovision/plots/spotify_genre_place_final_sorted.png]]
 
 ****** Top 10 Genres
 #+BEGIN_SRC python
@@ -453,22 +460,23 @@ top_df[[
      year    country              genre_name_0            genre_name_1      genre_name_2   genre_name_3    genre_name_4
 42   2011      Angel               russian pop                                                                         
 73   2012     Sweden                electropop                 europop        eurovision    swedish pop                
-110  2013     Norway                electropop           norwegian pop                                                 
-148  2014    Austria                eurovision                   strut                                                 
-151  2014     Sweden       classic swedish pop                 europop  swedish idol pop    swedish pop                
-185  2015     Sweden                   europop              eurovision  swedish idol pop    swedish pop                
-186  2015     Russia                eurovision       russian dance pop       russian pop                               
-187  2015      Italy  italian progressive rock            operatic pop                                                 
-225  2016    Ukraine                eurovision               tatar pop   ukrainian indie  ukrainian pop  ukrainian rock
-226  2016  Australia            australian pop  australian talent show        eurovision    talent show                
-227  2016     Russia                eurovision       russian dance pop       russian pop                               
-229  2016     Sweden          swedish idol pop                                                                         
-263  2016   Interval                   europop              eurovision  swedish idol pop    swedish pop                
-272  2017     Sweden                   europop        swedish idol pop       swedish pop                               
-313  2018    Germany                german pop               viral pop                                                 
-341  2018    Belarus         russian dance pop             russian pop     ukrainian pop                               
-363  2019     Russia                eurovision       russian dance pop       russian pop                               
-394  2019    Ukraine                eurovision             russian pop     ukrainian pop                               
+111  2013     Norway                electropop           norwegian pop                                                 
+141  2013      Bonus                  big room               dance pop               edm            pop                
+149  2014    Austria                eurovision                   strut                                                 
+152  2014     Sweden       classic swedish pop                 europop  swedish idol pop    swedish pop                
+186  2015     Sweden                   europop              eurovision  swedish idol pop    swedish pop                
+187  2015     Russia                eurovision       russian dance pop       russian pop                               
+188  2015      Italy  italian progressive rock            operatic pop                                                 
+226  2016    Ukraine                eurovision               tatar pop   ukrainian indie  ukrainian pop  ukrainian rock
+227  2016  Australia            australian pop  australian talent show        eurovision    talent show                
+228  2016     Russia                eurovision       russian dance pop       russian pop                               
+230  2016     Sweden          swedish idol pop                                                                         
+264  2016   Interval                   europop              eurovision  swedish idol pop    swedish pop                
+273  2017     Sweden                   europop              eurovision  swedish idol pop    swedish pop                
+314  2018    Germany                german pop                     pop         viral pop                               
+342  2018    Belarus                eurovision       russian dance pop       russian pop  ukrainian pop                
+364  2019     Russia                eurovision       russian dance pop       russian pop                               
+395  2019    Ukraine                eurovision             russian pop     ukrainian pop                               
 #+end_example
 
 ****** Bottom 10 Genres
@@ -502,15 +510,15 @@ bot_df[[
 #+begin_example
      year         country     genre_name_0        genre_name_1    genre_name_2 genre_name_3
 38   2010     Switzerland        swiss pop                                                 
-55   2011     Switzerland       eurovision         swiss indie       swiss pop             
+55   2011     Switzerland      swiss indie           swiss pop                             
 59   2011           Spain   galician indie                                                 
-89   2012  United Kingdom  adult standards  brill building pop  easy listening       lounge
-127  2013         Finland       eurovision         finnish pop                             
-166  2014        Slovenia    slovenian pop      slovenian rock                             
-206  2015         Austria     austrian pop          eurovision                             
-334  2018         Finland       eurovision    finnish idol pop     finnish pop             
-338  2018     Switzerland       eurovision           swiss pop                             
-378  2019         Austria     austrian pop                                                 
+90   2012  United Kingdom  adult standards  brill building pop  easy listening       lounge
+128  2013         Finland       eurovision         finnish pop                             
+167  2014        Slovenia    slovenian pop      slovenian rock                             
+207  2015         Austria     austrian pop          eurovision                             
+335  2018         Finland       eurovision    finnish idol pop     finnish pop             
+339  2018     Switzerland       eurovision           swiss pop                             
+379  2019         Austria     austrian pop                                                 
 #+end_example
 
 * Clustering
@@ -1286,7 +1294,7 @@ curr_features_list = [
 *** Getting Components
 ***** visualise_pca()
 #+BEGIN_SRC python
-def visualise_pca(curr_features_list):
+def visualise_pca(curr_features_list, file_extension="png"):
   X = get_feature_df(get_columns_from_keys(get_feature_keys(curr_features_list)))[3]
   scaler = StandardScaler()
   seg_X = scaler.fit_transform(X)
@@ -1333,7 +1341,11 @@ def visualise_pca(curr_features_list):
   ax.set_ylim(0.0, 1.075)
   #ax.set_ylim(0.4, 1.075)
   ax.legend(prop={"size" : 48})
-  filename = "pca_evr_cumsum.pdf"
+  filename = str(
+    "pca_evr_cumsum"
+    + "."
+    + file_extension
+  )
   plt.savefig(
     fig_dir / "plots" / filename,
     bbox_inches="tight",
@@ -1353,7 +1365,7 @@ path
 #+END_SRC
 
 #+RESULTS:
-[[file:/Users/antoniomendes/AUC_code/capstone/plots/pca_evr_cumsum.pdf]]
+[[file:/Users/antoniomendes/AUC_code/capstone/capstone_eurovision/plots/pca_evr_cumsum.png]]
 
 *** Comparing to wihtout PCA
 ***** plot_silhouette_pca()
@@ -1361,7 +1373,8 @@ path
 def plot_silhouette_pca(
   features,
   components, 
-  method = "pca_kmeans"
+  method = "pca_kmeans",
+  file_extension = "png"
 ):
   sil_scores_pca                  = list()
   sil_scores_pca_fewer_components = list()
@@ -1441,7 +1454,8 @@ def plot_silhouette_pca(
   filename = str(
     "sil_scores_"
     + method
-    + ".png"
+    + "."
+    + file_extension
   )
   plt.savefig(
     fig_dir / "plots" / filename, 
@@ -1455,20 +1469,24 @@ def plot_silhouette_pca(
 
 ***** run plot_silhouette_pca()
 #+BEGIN_SRC python :results file
-pca_kmeans_sil_scores, path = plot_silhouette_pca(curr_features_list, components)
+pca_kmeans_sil_scores = plot_silhouette_pca(curr_features_list, components)[0]
+
+
+path = plot_silhouette_pca(curr_features_list, components)[-1]
 
 path
 #+END_SRC
 
 #+RESULTS:
-[[file:/Users/antoniomendes/AUC_code/capstone/plots/pca_evr_cumsum.pdf]]
+[[file:/Users/antoniomendes/AUC_code/capstone/capstone_eurovision/plots/sil_scores_pca_kmeans.png]]
 
 ***** plot_silhouette_pca_02()
 #+BEGIN_SRC python
 def plot_silhouette_pca_02(
   features,
   components, 
-  method = "pca_kmeans"
+  method = "pca_kmeans",
+  file_extension = "png"
 ):
   sil_scores_pca                  = list()
   sil_scores_pca_fewer_components = list()
@@ -1532,7 +1550,8 @@ def plot_silhouette_pca_02(
   filename = str(
     "sil_scores_multi_"
     + method
-    + ".pdf"
+    + "."
+    + file_extension
   )
   plt.savefig(
     fig_dir / "plots" / filename, 
@@ -1552,12 +1571,12 @@ components = 2
 #+END_SRC
 
 #+RESULTS:
-[[file:/Users/antoniomendes/AUC_code/capstone/plots/sil_scores_multi_pca_kmeans.pdf]]
+[[file:/Users/antoniomendes/AUC_code/capstone/capstone_eurovision/plots/sil_scores_multi_pca_kmeans.png]]
 
 *** Getting Inertia/Distortion
 ***** imp_pca_elbow_method()
 #+BEGIN_SRC python
-def imp_pca_elbow_method(components, curr_features, method="pca_kmeans"):
+def imp_pca_elbow_method(components, curr_features, method="pca_kmeans", file_extension="png"):
   X = get_feature_df(get_columns_from_keys(get_feature_keys(curr_features)))[3]
   scaler = StandardScaler()
   seg_X = scaler.fit_transform(X)
@@ -1648,7 +1667,8 @@ def imp_pca_elbow_method(components, curr_features, method="pca_kmeans"):
       "elbow_"
       + "pca_"
       + method.split("_")[1]
-      + ".pdf"
+      + "."
+      + file_extension
     )
   plt.savefig(fig_dir / "plots" / "elbow" / filename, bbox_inches="tight")
   plt.close("all")
@@ -1796,7 +1816,8 @@ def plot_clusters_pca_inertia_distortion_between(
   inertia_clusters, 
   distortion_clusters, 
   method = "pca_kmeans",
-  between_value = None
+  between_value = None,
+  file_extension = "png"
 ):
   merged_df_dict=dict()
   feature_df, X = get_feature_df(get_columns_from_keys(get_feature_keys(features)))[2:]
@@ -1900,7 +1921,8 @@ def plot_clusters_pca_inertia_distortion_between(
     + "_".join(elbow_types)
     + "_"
     + str(cluster_amnt_between)
-    + ".pdf"
+    + "."
+    + file_extension
   )
   plt.savefig(fig_dir / "plots" /filename, bbox_inches="tight")
   plt.close("all")
@@ -1938,7 +1960,180 @@ path
 #+END_SRC
 
 #+RESULTS:
-[[file:/Users/antoniomendes/AUC_code/capstone/plots/label_plot_pca_kmeans_inertia_distortion_between_12.pdf]]
+[[file:/Users/antoniomendes/AUC_code/capstone/capstone_eurovision/plots/label_plot_pca_kmeans_inertia_distortion_between_12.png]]
+
+***** plot_clusters_pca_all()
+#+BEGIN_SRC python
+def plot_clusters_pca_all(
+  features, components, 
+  inertia_clusters, 
+  distortion_clusters, 
+  method = "pca_kmeans",
+  file_extension = "png"
+):
+  feature_df, X = get_feature_df(get_columns_from_keys(get_feature_keys(features)))[2:]
+  feature_columns = get_columns_from_keys(get_feature_keys(features))
+  scaler = StandardScaler()
+  seg_X = scaler.fit_transform(X)
+  pca = PCA(n_components = components)
+  scores_pca = pca.fit_transform(seg_X)
+  cluster_amount = [inertia_clusters, distortion_clusters]
+  values_between = [np.min(cluster_amount) + i for i in range(1, (np.max(cluster_amount) - np.min(cluster_amount)))]
+  fig, ax = plt.subplots(
+    len(values_between), 3, 
+    sharex=False, 
+    #sharey=True, 
+    sharey=False,
+    figsize=(30 * len(values_between), 40 * len(values_between))
+  )
+  elbow_types    = ["inertia", "distortion", "between"]
+  elbow_colors = [
+    '008fd5', 
+    'fc4f30', 
+    'e5ae38', 
+    '6d904f', 
+    '8b8b8b', 
+    '810f7c'
+  ]
+  for i, cluster_value in enumerate(values_between):
+    cluster_sizes = [inertia_clusters, distortion_clusters, cluster_value]
+    for j, eb in enumerate(elbow_types):
+      model = KMeans(n_clusters=cluster_sizes[j], random_state=0).fit(scores_pca)
+      labels   = model.labels_
+      feature_df["label"] = labels
+      merged_feature_df = pd.merge(feature_df, filtered_spotify_df, on=["year","year_country"])
+      merged_feature_df = merged_feature_df.dropna(subset=["place_final"])
+      df = pd.DataFrame({
+        "label" : merged_feature_df.label,
+        "place_final" : merged_feature_df.place_final
+      })
+      grouped_df = df.groupby(["label"], sort=True).mean()
+      average_df = pd.DataFrame({
+        "label" : grouped_df.index.to_numpy(),
+        "place_final" : grouped_df["place_final"]
+      })
+      average_df = average_df.sort_values(by=["place_final"], ascending=False)
+      x = np.arange(len(average_df))
+      y = np.array(average_df["place_final"])
+      ax[i,j].scatter(
+        x,
+        y,
+        s=2000,
+        linewidth=4,
+        #alpha=0.6,
+        edgecolor="k",
+        zorder=1,
+      )
+      ax[i,j].plot(
+        x, y,
+        linewidth=10,
+        color="orange",
+        zorder=0
+      )
+      ax[i,j].set_xlim(
+        np.min(x) -0.5,
+        np.max(x) + 0.5
+      )
+      plot_title = str(
+        str(cluster_sizes[j]) 
+        + " Clusters from " 
+        + elbow_types[j]
+      ).title()
+      ax[i,j].set_title(
+        plot_title, 
+        pad=20, 
+        fontsize=72
+      ) 
+      #if((i+1) == len(values_between)):
+      ax[i,j].set_xlabel("Label", labelpad=40, fontsize=60)
+      if(j == 0):
+        ax[i,j].set_ylabel("Place at Finals", labelpad=40, fontsize=60)
+      ax[i,j].tick_params(axis="x", labelsize=48)
+      if(cluster_sizes[j] >= 30):
+        font_reduction = 8 * (cluster_sizes[h] - 20)/10
+        ax[i,j].tick_params(axis="x", labelsize=48 - font_reduction)
+      ax[i,j].tick_params(axis="y", labelsize=48)
+      ax[i,j].yaxis.set_major_locator(ticker.MultipleLocator(5))
+      ax[i,j].set_ylim(0,27)
+      ax[i,j].set_xticks(x)
+      string_labels = list()
+      for lbl in average_df.label:
+        if len(str(lbl)) == 1:
+          string_labels.append(str(lbl).zfill(2))
+        else:
+          string_labels.append(str(lbl))
+      ax[i,j].set_xticklabels(string_labels)
+  title = str(
+    "Relationship between "
+    + method.split("_")[0].upper()
+    + " "
+    + method.split("_")[1].title()
+    + "\n"
+    + "Labels and Place at Finals"
+  )
+  fig.suptitle(title, y=0.925, fontsize = 100)
+  plt.subplots_adjust(hspace = 0.6, wspace=0.1)
+  r = fig.canvas.get_renderer()
+  get_bbox = lambda axis: axis.get_tightbbox(r).transformed(fig.transFigure.inverted())
+  bboxes = np.array(list(map(get_bbox, ax.flat)), mtrans.Bbox).reshape(ax.shape)
+  #Get the minimum and maximum extent, get the coordinate half-way between those
+  xmax = np.array(list(map(lambda b: b.y1, bboxes.flat))).reshape(ax.shape).max(axis=0)[0]
+  xmin = np.array(list(map(lambda b: b.y0, bboxes.flat))).reshape(ax.shape).min(axis=0)[0]
+  ymax = np.array(list(map(lambda b: b.y1, bboxes.flat))).reshape(ax.shape).max(axis=1)
+  ymin = np.array(list(map(lambda b: b.y0, bboxes.flat))).reshape(ax.shape).min(axis=1)
+  ys = np.c_[ymax[1:], ymin[:-1]].mean(axis=1)
+  # Draw a horizontal lines at those coordinates
+  fivethirtyeight_colors = [
+    '008fd5', # blue
+    'fc4f30', # red
+    'e5ae38', # yellow
+    '6d904f', # green
+    '8b8b8b', # gray
+    'bbbbbb', # lightgray
+    'cfcfcf', # lightlightgray
+    '810f7c', # purple
+  ]
+  for y in ys:
+    line = plt.Line2D(
+      [xmin,xmax], [y,y], 
+      linewidth=10, 
+      linestyle="dashed", 
+      transform=fig.transFigure, 
+      color="#bbbbbb"
+    )
+    fig.add_artist(line)
+  for i in range(len(values_between)):
+    values_between[i] = str(values_between[i])
+  filename = str(
+    "label_plot"
+    + "_"
+    + method
+    + "_"
+    + "_".join(elbow_types)
+    + "_"
+    + "_".join(values_between)
+    + "."
+    + file_extension
+  )
+  filename="test_2.png"
+  plt.savefig(
+    fig_dir / "plots" /filename, 
+    bbox_inches="tight",
+    dpi = fig.dpi//3.5
+  )
+  plt.close("all")
+  return fig_dir / "plots" / filename
+#+END_SRC
+
+#+RESULTS:
+: /Users/antoniomendes/AUC_code/capstone/capstone_eurovision/plots/test_2.png
+
+***** running plot_clusters_pca_all
+#+BEGIN_SRC python :results file
+plot_clusters_pca_all(curr_features_list, components, 9, 13)
+#+END_SRC
+
+#+RESULTS:
 
 ***** boxplot_pca()
 #+BEGIN_SRC python
@@ -1946,7 +2141,8 @@ def boxplot_pca(
   features, 
   components, 
   cluster_amount,
-  method = "pca_kmeans"
+  method = "pca_kmeans",
+  file_extension = "png"
 ):
   feature_df, X = get_feature_df(get_columns_from_keys(get_feature_keys(features)))[2:]
   feature_columns = get_columns_from_keys(get_feature_keys(features))
@@ -2099,7 +2295,8 @@ def boxplot_pca(
     + method
     + "_"
     + str(cluster_amount)
-    + ".png"
+    + "."
+    + file_extension
   )
   plt.savefig(fig_dir / "plots"/ filename, bbox_inches="tight")
   return labels, min_values, first_qrt, third_qrt, max_values, medians, means, fliers, fig_dir / "plots"/ filename
@@ -2107,8 +2304,8 @@ def boxplot_pca(
 
 #+RESULTS:
 
-***** running box_plot_pca()
-#+BEGIN_SRC python
+***** running boxplot_pca()
+#+BEGIN_SRC python :results file
 labels, min_values, first_qrt, third_qrt, max_values, medians, means, fliers, path = boxplot_pca(
   curr_features_list, 
   components, 
@@ -2138,9 +2335,207 @@ labels, min_values, first_qrt, third_qrt, max_values, medians, means, fliers, pa
   components, 
   13
 )
+
+path
 #+END_SRC
 
 #+RESULTS:
+
+***** boxplot_pca_all()
+#+BEGIN_SRC python
+def boxplot_pca_all(
+  features, 
+  components, 
+  cluster_set,
+  method = "pca_kmeans",
+  file_extension = "png"
+):
+  size = len(cluster_set)
+  rows = (size // 2) + size % 2
+  fig, ax = plt.subplots(rows, 2, sharex=False, sharey=False, figsize=(40 * rows, 30 * rows))
+  for i in range(size):
+    row = i // 2
+    col = i % 2
+    feature_df, X = get_feature_df(get_columns_from_keys(get_feature_keys(features)))[2:]
+    feature_columns = get_columns_from_keys(get_feature_keys(features))
+    scaler = StandardScaler()
+    seg_X = scaler.fit_transform(X)
+    pca = PCA(n_components = components)
+    scores_pca = pca.fit_transform(seg_X)
+    model = KMeans(n_clusters=cluster_set[i], random_state=0).fit(scores_pca)
+    labels   = model.labels_
+    feature_df["label"] = labels
+    merged_feature_df = pd.merge(feature_df, filtered_spotify_df, on=["year","year_country"])
+    merged_feature_df = merged_feature_df.dropna(subset=["place_final"])
+    df = pd.DataFrame({
+      "label" : merged_feature_df.label,
+      "place_final" : merged_feature_df.place_final
+    })
+    grouped_df = df.groupby(["label"], sort=True).mean()
+    average_df = pd.DataFrame({
+      "label" : grouped_df.index.to_numpy(),
+      "place_final" : grouped_df["place_final"]
+    })
+    average_df = average_df.sort_values(by=["place_final"], ascending=False)
+    input_list = list()
+    label_list = list()
+    for j,lbl in enumerate(average_df.label):
+      label_list.append(lbl)
+      input_list.append(np.array(df[df.label == lbl].place_final))
+    fivethirtyeight_colors = [
+      '008fd5', # blue
+      'fc4f30', # red
+      'e5ae38', # yellow
+      '6d904f', # green
+      '8b8b8b', # gray
+      'bbbbbb', # lightgray
+      'cfcfcf', # lightlightgray
+      '810f7c', # purple
+    ]
+    rgb_colors = list()
+    for color in fivethirtyeight_colors:
+      rgb_colors.append(tuple(int(color[j:j+2], 16)/256 for j in (0, 2, 4)))
+    #print("rgb_colors:",rgb_colors)
+    bp = ax[row, col].boxplot(
+      input_list,
+      boxprops     = dict(linewidth=10, color=rgb_colors[5]),
+      flierprops   = dict(marker='o', markersize=50, markerfacecolor=rgb_colors[1], alpha=0.0),
+      medianprops  = dict(linestyle='-.',linewidth=5, color=rgb_colors[0], alpha=0.0),
+      meanprops    = dict(marker='X', markersize=50, color=rgb_colors[2], alpha=0.0),
+      whiskerprops = dict(linestyle='-', linewidth=10, color=rgb_colors[4]),
+      capprops     = dict(linewidth=10, color=rgb_colors[5]),
+      showmeans = True,
+      zorder = 1,
+    )
+    min_values = list()
+    first_qrt  = list()
+    third_qrt  = list()
+    max_values = list()
+    for j in range(0,len(bp["whiskers"]), 2):
+      min_values.append(bp["whiskers"][j].get_data()[1][1])
+      first_qrt.append(bp["whiskers"][j].get_data()[1][0])
+      third_qrt.append(bp["whiskers"][j + 1].get_data()[1][0])
+      max_values.append(bp["whiskers"][j + 1].get_data()[1][1])
+    x = list()
+    medians = list()
+    for j, median in enumerate(bp["medians"]):
+      x.append(median.get_data()[0])
+      medians.append(bp["medians"][j].get_data()[1])
+    medians = np.array(medians)
+    for j in range(0, len(x)):
+      ax[row, col].plot(
+        x[j], medians[j],
+        linewidth = 5,
+        linestyle = '-.',
+        color = rgb_colors[0],
+      )
+      if j == 0:
+        ax[row, col].plot(
+        x[j], medians[j],
+        linewidth = 5,
+        linestyle = '-.',
+        color = rgb_colors[0],
+        label = "median",
+      )
+    means = list()
+    for j, mean in enumerate(bp["means"]):
+      means.append([
+        bp["means"][j].get_data()[0],
+        bp["means"][j].get_data()[1]
+      ])
+    means = np.array(means)
+    ax[row, col].scatter(
+      means[:,0], means[:,1],
+      s = 3000,
+      marker = "X",
+      c = rgb_colors[2],
+      alpha = 0.75,
+      label = "mean",
+    )
+    fliers = list()
+    flier_count = 0
+    for j, flier in enumerate(bp["fliers"]):
+      if(len(bp["fliers"][j].get_data()[0]) > 0):
+        flier_count += 1
+        fliers.append([bp["fliers"][j].get_data()[0], bp["fliers"][j].get_data()[1]])
+    fliers = np.array(fliers)
+    if flier_count > 0:
+      print("outliers exists!")
+      ax[row, col].scatter(
+        fliers[:,0], fliers[:,1],
+        s = 1000,
+        marker = "o",
+        c = rgb_colors[1],
+        linewidth = 3,
+        edgecolor=rgb_colors[4],
+        alpha = 0.75,
+        label = "outlier"
+      )
+    ax[row, col].legend(prop={'size': 48})
+    title = str(
+      str(cluster_set[i])
+      + " Clusters"
+    )
+    ax[row, col].set_title(title, pad=10, fontsize = 60)
+    ax[row, col].set_xlabel("Label", labelpad=40, fontsize=60)
+    ax[row, col].set_ylabel("Place at Finals", labelpad=40, fontsize = 60)
+    string_labels = list()
+    for lbl in label_list:
+      if len(str(lbl)) == 1:
+        string_labels.append(str(lbl).zfill(2))
+      else:
+        string_labels.append(str(lbl))
+    ax[row, col].set_xticks(np.arange(len(label_list)) + 1)
+    ax[row, col].set_xticklabels(string_labels)
+    ax[row, col].tick_params(axis="x", labelsize=48)
+    ax[row, col].tick_params(axis="y", labelsize=48)
+    ax[row, col].set_ylim(-2,28)
+    ax[row, col].yaxis.set_major_locator(ticker.MultipleLocator(5))
+  plt.subplots_adjust(hspace = 0.4)
+  fig.suptitle(
+    str(
+      "Relationship between "
+      + method.split("_")[0].upper()
+      + " "
+      + method.split("_")[1].title()
+      + "\n"
+      + "Labels and Place at Finals"
+    ), 
+    y=0.95, 
+    fontsize = 72
+  )
+  for i in range(len(cluster_set)):
+    cluster_set[i] = str(cluster_set[i])
+  filename = str(
+    "boxplot"
+    + "_"
+    + method
+    + "_"
+    + "_".join(cluster_set)
+    + "."
+    + file_extension
+  )
+  #filename = "test.png"
+  plt.savefig(fig_dir / "plots"/ filename, bbox_inches="tight")
+  plt.close("all")
+  return labels, min_values, first_qrt, third_qrt, max_values, medians, means, fliers, fig_dir / "plots"/ filename
+#+END_SRC
+
+#+RESULTS:
+
+***** running boxplot_pca_all
+#+BEGIN_SRC python :results file
+labels, min_values, first_qrt, third_qrt, max_values, medians, means, fliers, path = boxplot_pca_all(
+  curr_features_list, 
+  components, 
+  [i for i in range(9,14)]
+)
+
+path
+#+END_SRC
+
+#+RESULTS:
+[[file:/Users/antoniomendes/AUC_code/capstone/capstone_eurovision/plots/boxplot_pca_kmeans_9_10_11_12_13.png]]
 
 *** Finding Best/Worst Songs 
 Specifications:
